@@ -1,0 +1,15 @@
+# --- SECURITY ---
+.env
+.venv
+venv/
+__pycache__/
+
+# --- DATA PROTECTION ---
+backend/data/*.csv
+backend/data/*.xlsx
+*.csv
+
+# --- FRONTEND ---
+node_modules/
+dist/
+.DS_Store
