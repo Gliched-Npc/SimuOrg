@@ -11,7 +11,7 @@ def get_sample_data(session: Session = Depends(get_session)):
     """
     Fetches the first 5 employees to prove the Database is connected.
     """
-    statement = select(Employee).limit(5)
+    statement = select(Employee).limit(10)
     employees = session.exec(statement).all()
     
     if not employees:
