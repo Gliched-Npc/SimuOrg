@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:15
+    restart: always
     container_name: simuorg_db
     ports:
       - "5435:5432"

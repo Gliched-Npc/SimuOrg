@@ -13,3 +13,9 @@ backend/data/*.xlsx
 node_modules/
 dist/
 .DS_Store
+
+#----Logs&Docs---
+BACKEND_LOG.md
+FRONTEND_LOG.md
+FRONTEND_DOCS.md
+SIMUORG_DOCS.md
