@@ -1,7 +1,13 @@
 from sqlmodel import SQLModel, create_engine, Session
+from dotenv import load_dotenv
+import os
 
-# Hardcoded for simplicity right now - we will use .env later
-DATABASE_URL = "postgresql://user:password@localhost:5435/simuorg_db"
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set in .env file")
 
 engine = create_engine(DATABASE_URL)
 
@@ -9,6 +15,12 @@ def init_db():
     SQLModel.metadata.create_all(engine)
 
 def get_session():
-    """Provide DB session"""
     with Session(engine) as session:
         yield session
+# ```
+
+# ---
+
+# **Step 4 — Install python-dotenv if you haven't:**
+# ```
+# pip install python-dotenv

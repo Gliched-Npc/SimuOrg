@@ -1,13 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # <--- NEW IMPORT
+from fastapi.middleware.cors import CORSMiddleware
 from backend.api import sim_routes
+from backend.database import init_db
 
-app = FastAPI(title="SimuOrg API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
-# --- NEW SECURITY SETTINGS (CORS) ---
-# This tells the Backend: "It is safe to talk to the React App"
+app = FastAPI(title="SimuOrg API", version="1.0.0", lifespan=lifespan)
+
 origins = [
-    "http://localhost:5173",    # The address of your React App
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
@@ -18,9 +23,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# ------------------------------------
 
-# Connect the routes
 app.include_router(sim_routes.router, prefix="/api/sim", tags=["Simulation"])
 
 @app.get("/")

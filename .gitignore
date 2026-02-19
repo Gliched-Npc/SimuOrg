@@ -3,6 +3,9 @@
 .venv
 venv/
 __pycache__/
+*.pyc
+*.pkl
+*.joblib
 
 # --- DATA PROTECTION ---
 backend/data/*.csv
