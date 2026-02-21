@@ -3,6 +3,13 @@
 from backend.simulation.agent import EmployeeAgent
 from backend.simulation.org_graph import build_org_graph
 import networkx as nx
+import json
+with open("backend/ml/exports/calibration.json") as f:
+    _cal = json.load(f)
+
+STRESS_GAIN_RATE = _cal["stress_gain_rate"]
+RECOVERY_RATE    = _cal["recovery_rate"]
+
 
 def compute_neighbor_influence(agent: EmployeeAgent, G: nx.Graph) -> tuple[float, float]:
     """
@@ -39,13 +46,13 @@ def update_agent_state(agent: EmployeeAgent,
 
     # Step 2 — Update stress
     stress_gain = (
-    0.02 * workload_multiplier +
-    0.01 * neighbor_stress +
-    0.005 * agent.fatigue -
-    0.001 * min(comm_quality, 5.0)
+        STRESS_GAIN_RATE * workload_multiplier +
+        0.01 * neighbor_stress +
+        0.005 * agent.fatigue -
+        0.001 * min(comm_quality, 5.0)
     )
     agent.stress = max(0.0, min(agent.stress + stress_gain, 1.0))
-    agent.stress = max(0.0, agent.stress - 0.005)
+    agent.stress = max(0.0, agent.stress - RECOVERY_RATE)
 
     # Step 3 — Update fatigue
     if agent.stress > 0.5:
@@ -81,7 +88,7 @@ def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
         neighbor_agent = G.nodes[neighbor_id].get("agent")
 
         if neighbor_agent and neighbor_agent.is_active:
-            neighbor_agent.stress  += shock_factor * weight
+            neighbor_agent.stress  += shock_factor * weight* 0.3
             neighbor_agent.loyalty -= shock_factor * weight
 
             # Cap values

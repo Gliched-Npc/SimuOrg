@@ -9,6 +9,16 @@ from backend.simulation.agent import EmployeeAgent, quit_model
 from backend.simulation.org_graph import build_org_graph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
+import json
+
+# Load calibration at top of file
+with open("backend/ml/exports/calibration.json") as f:
+    calibration = json.load(f)
+
+QUIT_THRESHOLD   = calibration["quit_threshold"]
+STRESS_THRESHOLD = calibration["stress_threshold"]
+NATURAL_MONTHLY_RATE = calibration["monthly_natural_rate"]
+NATURAL_SCALE = calibration['natural_scale']
 
 
 def load_agents_from_db() -> list[EmployeeAgent]:
@@ -17,13 +27,16 @@ def load_agents_from_db() -> list[EmployeeAgent]:
     return [EmployeeAgent(emp) for emp in employees]
 
 
-def run_simulation(config: SimulationConfig = None) -> dict:
+def run_simulation(config: SimulationConfig = None, agents=None, G=None) -> dict:
     if config is None:
         config = SimulationConfig()
 
     print("🚀 Starting simulation...")
-    agents = load_agents_from_db()
-    G = build_org_graph(agents)
+    if agents is None:
+        agents = load_agents_from_db()
+    if G is None:
+        G = build_org_graph(agents)
+
     logs = []
 
     for month in range(1, config.duration_months + 1):
@@ -43,7 +56,16 @@ def run_simulation(config: SimulationConfig = None) -> dict:
                 continue
             yearly_prob  = quit_model.predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
-            if agent.stress > 0.15 and yearly_prob > 0.25:
+
+            #Natural attrition
+            
+            
+            if random.random() < NATURAL_MONTHLY_RATE:
+                quitting_agents.append(agent)
+                continue
+
+            # stress driven attrition
+            if agent.stress > STRESS_THRESHOLD and yearly_prob > QUIT_THRESHOLD:
                 if random.random() < monthly_prob:
                     quitting_agents.append(agent)
 
@@ -67,7 +89,7 @@ def run_simulation(config: SimulationConfig = None) -> dict:
                 new_agent.job_satisfaction   = 3.0
                 new_agent.work_life_balance  = 3.0
                 new_agent.performance_rating = 3
-                new_agent.stress             = 0.0
+                new_agent.stress             = 0.1
                 new_agent.fatigue            = 0.0
                 new_agent.motivation         = 0.75
                 new_agent.loyalty            = 0.1
@@ -84,6 +106,9 @@ def run_simulation(config: SimulationConfig = None) -> dict:
         avg_stress       = np.mean([a.stress for a in active_agents])
         avg_productivity = np.mean([a.productivity for a in active_agents])
         avg_motivation   = np.mean([a.motivation for a in active_agents])
+        avg_job_sat      = np.mean([a.job_satisfaction for a in active_agents])
+        avg_wlb          = np.mean([a.work_life_balance for a in active_agents])
+        avg_loyalty      = np.mean([a.loyalty for a in active_agents])
         burnout_count    = sum(1 for a in active_agents if a.stress > a.burnout_limit)
 
         logs.append({
@@ -93,13 +118,22 @@ def run_simulation(config: SimulationConfig = None) -> dict:
             "avg_stress"      : round(float(avg_stress), 4),
             "avg_productivity": round(float(avg_productivity), 4),
             "avg_motivation"  : round(float(avg_motivation), 4),
+            "avg_job_satisfaction":  round(float(avg_job_sat), 4),
+            "avg_work_life_balance": round(float(avg_wlb), 4),
+            "avg_loyalty"     : round(float(avg_loyalty), 4),
             "burnout_count"   : burnout_count,
         })
 
-        print(f"   👥 Headcount: {len(active_agents)} | "
-              f"Quit: {len(quitting_agents)} | "
-              f"Stress: {avg_stress:.3f} | "
-              f"Productivity: {avg_productivity:.3f}")
+
+
+        print(f"   👥 {len(active_agents)} | "
+            f"Quit: {len(quitting_agents)} | "
+            f"Stress: {avg_stress:.3f} | "
+            f"Productivity: {avg_productivity:.3f} | "
+            f"JobSat: {avg_job_sat:.2f} | "
+            f"WLB: {avg_wlb:.2f} | "
+            f"Loyalty: {avg_loyalty:.2f} | "
+            f"Burnout: {burnout_count}")
 
     print("✅ Simulation complete.")
     return {"config": config.__dict__, "logs": logs}

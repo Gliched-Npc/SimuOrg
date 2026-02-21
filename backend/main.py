@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(sim_routes.router, prefix="/api/sim", tags=["Simulation"])
+app.include_router(sim_routes.router)
 
 @app.get("/")
 def health_check():

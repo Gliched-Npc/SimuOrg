@@ -22,7 +22,14 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df[col].fillna(median_val)
         if missing > 0:
             print(f"  ↳ {col}: filled {missing} nulls with median ({median_val})")
+    # Remove duplicates
+    before = len(df)
+    df = df.drop_duplicates(subset=['EmployeeID'])
+    if len(df) < before:
+        print(f"  ↳ Removed {before - len(df)} duplicate EmployeeIDs")
 
+    # Normalize department names
+    df['Department'] = df['Department'].str.strip().str.title()
     print("✅ Cleaning done.")
     return df
 

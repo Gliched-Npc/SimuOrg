@@ -28,11 +28,11 @@ class Employee(SQLModel, table=True):
     work_life_balance: float
     environment_satisfaction: float
     job_involvement: int
-    attrition: str          # "Yes" / "No"  ← ML target
+    attrition: Optional[str] =Field(default="No")          # "Yes" / "No"  ← ML target
 
     # Promotion & Manager history
-    years_since_last_promotion: int
-    years_with_curr_manager: int
+    years_since_last_promotion: Optional[int] = Field(default=0)
+    years_with_curr_manager: Optional[int] = Field(default=0)
     
     class Config:
         populate_by_name = True
