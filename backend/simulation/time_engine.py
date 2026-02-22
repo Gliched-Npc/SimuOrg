@@ -129,6 +129,10 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None) -> dict
                 new_agent.years_since_last_promotion = 0
                 new_agent.years_with_curr_manager    = 0
                 new_agent.stock_option_level         = 0
+                new_agent.age                        = random.randint(22, 35)
+                new_agent.distance_from_home         = quitter.distance_from_home
+                new_agent.percent_salary_hike        = 15
+                new_agent.marital_status             = quitter.marital_status
                 agents.append(new_agent)
                 G.add_node(new_agent.employee_id, agent=new_agent)
                 if new_agent.manager_id and G.has_node(new_agent.manager_id):

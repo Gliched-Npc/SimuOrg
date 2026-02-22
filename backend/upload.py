@@ -12,7 +12,8 @@ REQUIRED_COLUMNS = [
     "TotalWorkingYears", "NumCompaniesWorked", "PerformanceRating",
     "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction",
     "JobInvolvement", "Attrition", "YearsSinceLastPromotion",
-    "YearsWithCurrManager","StockOptionLevel"
+    "YearsWithCurrManager", "StockOptionLevel",
+    "MaritalStatus", "DistanceFromHome", "PercentSalaryHike",
 ]
 
 
@@ -109,6 +110,22 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # --- TotalWorkingYears ---
     df['TotalWorkingYears'] = df['TotalWorkingYears'].clip(lower=0)
 
+    # --- DistanceFromHome ---
+    if 'DistanceFromHome' in df.columns:
+        df['DistanceFromHome'] = pd.to_numeric(df['DistanceFromHome'], errors='coerce')
+        df['DistanceFromHome'] = df['DistanceFromHome'].fillna(0).round(0).astype(int)
+        df['DistanceFromHome'] = df['DistanceFromHome'].clip(lower=0)
+    else:
+        df['DistanceFromHome'] = 0
+
+    # --- PercentSalaryHike ---
+    if 'PercentSalaryHike' in df.columns:
+        df['PercentSalaryHike'] = pd.to_numeric(df['PercentSalaryHike'], errors='coerce')
+        df['PercentSalaryHike'] = df['PercentSalaryHike'].fillna(0).round(0).astype(int)
+        df['PercentSalaryHike'] = df['PercentSalaryHike'].clip(lower=0)
+    else:
+        df['PercentSalaryHike'] = 0
+
     # --- Normalize string columns ---
     
     df['Attrition']  = df['Attrition'].fillna('No').str.strip().str.capitalize()
@@ -116,6 +133,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df['Gender']     = df['Gender'].fillna('Unknown').str.strip().str.capitalize()
     df['JobRole']    = df['JobRole'].fillna('Unknown').str.strip().str.title()
     df['Department'] = df['Department'].fillna('Unknown').str.strip().str.title()
+    df['MaritalStatus'] = df.get('MaritalStatus', pd.Series(['Unknown']*len(df))).fillna('Unknown').str.strip().str.capitalize()
 
     print(f"✅ Cleaning done. {len(df)} rows ready.")
     return df
@@ -200,6 +218,9 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 years_since_last_promotion = int(row['YearsSinceLastPromotion']),
                 years_with_curr_manager    = int(row['YearsWithCurrManager']),
                 stock_option_level         = int(row.get('StockOptionLevel',0)),
+                marital_status             = str(row.get('MaritalStatus', 'Unknown')),
+                distance_from_home         = int(row.get('DistanceFromHome', 0)),
+                percent_salary_hike        = int(row.get('PercentSalaryHike', 0)),
             )
             employees.append(emp)
         except Exception as e:

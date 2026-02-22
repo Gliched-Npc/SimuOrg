@@ -34,6 +34,10 @@ class EmployeeAgent:
         self.years_since_last_promotion = db_employee.years_since_last_promotion
         self.years_with_curr_manager    = db_employee.years_with_curr_manager
         self.stock_option_level         = getattr(db_employee, 'stock_option_level', 0) or 0
+        self.age                        = db_employee.age
+        self.distance_from_home         = getattr(db_employee, 'distance_from_home', 0) or 0
+        self.percent_salary_hike        = getattr(db_employee, 'percent_salary_hike', 0) or 0
+        self.marital_status             = getattr(db_employee, 'marital_status', 'Unknown') or 'Unknown'
 
         self.stress       = 0.0
         self.fatigue      = 0.0
@@ -62,12 +66,17 @@ class EmployeeAgent:
             "years_with_curr_manager":    self.years_with_curr_manager,
             "performance_rating":         self.performance_rating,
             "stock_option_level":         self.stock_option_level,
+            "age":                        self.age,
+            "distance_from_home":         self.distance_from_home,
+            "percent_salary_hike":        self.percent_salary_hike,
+            "marital_status":             self.marital_status,
         }])
         # Engineered features — must match attrition_model.py
         df['stagnation_score']      = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
         df['satisfaction_composite'] = (df['job_satisfaction'] + df['work_life_balance'] + df['environment_satisfaction']) / 3
         df['career_velocity']       = df['job_level'] / (df['total_working_years'] + 1)
         df['loyalty_index']         = df['years_at_company'] / (df['total_working_years'] + 1)
+        df['is_single']             = (df['marital_status'].str.lower() == 'single').astype(int)
 
         return df[quit_features]        
 

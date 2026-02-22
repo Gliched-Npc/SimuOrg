@@ -13,9 +13,12 @@ class Employee(SQLModel, table=True):
     # Demographics
     age: int
     gender: str
+    marital_status: Optional[str] = Field(default="Unknown")
+    distance_from_home: Optional[int] = Field(default=0)
 
     # Financial
     monthly_income: int
+    percent_salary_hike: Optional[int] = Field(default=0)
 
     # Experience
     years_at_company: int

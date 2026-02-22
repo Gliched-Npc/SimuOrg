@@ -43,6 +43,10 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
             "years_with_curr_manager":     emp.years_with_curr_manager,
             "performance_rating":          emp.performance_rating,
             "stock_option_level":          emp.stock_option_level,
+            "age":                         emp.age,
+            "distance_from_home":          emp.distance_from_home,
+            "percent_salary_hike":         emp.percent_salary_hike,
+            "marital_status":              emp.marital_status,
         }])
         df_emp=engineer_features(df_emp)
         prob = quit_model.predict_proba(df_emp[FEATURES])[0][1]

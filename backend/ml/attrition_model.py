@@ -27,11 +27,15 @@ FEATURES = [
     "years_with_curr_manager",
     "performance_rating",
     "stock_option_level",
+    "age",
+    "distance_from_home",
+    "percent_salary_hike",
     # Engineered features
     "stagnation_score",
     "satisfaction_composite",
     "career_velocity",
     "loyalty_index",
+    "is_single",
 ]
 
 TARGET = "attrition"
@@ -62,6 +66,12 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Loyalty index — tenure relative to total experience
     df['loyalty_index'] = df['years_at_company'] / (df['total_working_years'] + 1)
+
+    # Marital status encoding — single employees quit more
+    if 'marital_status' in df.columns:
+        df['is_single'] = (df['marital_status'].str.lower() == 'single').astype(int)
+    else:
+        df['is_single'] = 0
 
     return df
 
