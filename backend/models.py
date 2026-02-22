@@ -33,6 +33,7 @@ class Employee(SQLModel, table=True):
     # Promotion & Manager history
     years_since_last_promotion: Optional[int] = Field(default=0)
     years_with_curr_manager: Optional[int] = Field(default=0)
+    stock_option_level:int = Field(default=0)
     
     class Config:
         populate_by_name = True

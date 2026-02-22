@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from backend.database import engine
 from backend.models import Employee
 from backend.ml.burnout_estimator import burnout_threshold
+from backend.ml.attrition_model import engineer_features,FEATURES
 
 
 def calibrate(save_path="backend/ml/exports/calibration.json"):
@@ -20,13 +21,15 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     if not employees :
         raise ValueError("No employees found in database , Run upload/ingest first")
 
-    quit_model = joblib.load("backend/ml/exports/quit_probability.pkl")
+    _saved     = joblib.load("backend/ml/exports/quit_probability.pkl")
+    quit_model = _saved["model"]
+    tune_threshold=_saved['threshold']
 
     quit_probs = []
     burnout_limits = []
 
     for emp in employees:
-        features = pd.DataFrame([{
+        df_emp = pd.DataFrame([{
             "job_satisfaction":         emp.job_satisfaction,
             "work_life_balance":        emp.work_life_balance,
             "environment_satisfaction": emp.environment_satisfaction,
@@ -36,8 +39,13 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
             "total_working_years":      emp.total_working_years,
             "num_companies_worked":     emp.num_companies_worked,
             "job_level":                emp.job_level,
+            "years_since_last_promotion":  emp.years_since_last_promotion,
+            "years_with_curr_manager":     emp.years_with_curr_manager,
+            "performance_rating":          emp.performance_rating,
+            "stock_option_level":          emp.stock_option_level,
         }])
-        prob = quit_model.predict_proba(features)[0][1]
+        df_emp=engineer_features(df_emp)
+        prob = quit_model.predict_proba(df_emp[FEATURES])[0][1]
         quit_probs.append(prob)
         burnout_limits.append(burnout_threshold(emp.job_level, emp.total_working_years))
 
@@ -68,7 +76,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     shockwave_stress_factor  = round(0.3 * (1 - avg_loyalty * 0.3), 4)
     shockwave_loyalty_factor = round(0.1 * (1 - avg_loyalty * 0.2), 4)
     calibration = {
-        "quit_threshold":        round(float(np.percentile(quit_probs, 70)), 4),
+        "quit_threshold":        tune_threshold,
         "stress_threshold":      round(float(np.percentile(burnout_limits, 30)), 4),
         "avg_quit_prob":         round(float(np.mean(quit_probs)), 4),
         "avg_burnout_limit":     round(float(np.mean(burnout_limits)), 4),

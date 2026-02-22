@@ -11,7 +11,10 @@ if not os.path.exists(_QUIT_MODEL_PATH):
         f"Quit model not found at {_QUIT_MODEL_PATH}. "
         "Run backend/ml/train.py first."
     )
-quit_model = joblib.load(_QUIT_MODEL_PATH)
+_saved         = joblib.load(_QUIT_MODEL_PATH)
+quit_model     = _saved["model"]
+quit_threshold = _saved["threshold"]
+quit_features  = _saved["features"]
 
 
 class EmployeeAgent:
@@ -28,6 +31,9 @@ class EmployeeAgent:
         self.job_satisfaction       = db_employee.job_satisfaction
         self.work_life_balance      = db_employee.work_life_balance
         self.performance_rating     = db_employee.performance_rating
+        self.years_since_last_promotion = db_employee.years_since_last_promotion
+        self.years_with_curr_manager    = db_employee.years_with_curr_manager
+        self.stock_option_level         = getattr(db_employee, 'stock_option_level', 0) or 0
 
         self.stress       = 0.0
         self.fatigue      = 0.0
@@ -42,17 +48,28 @@ class EmployeeAgent:
         )
 
     def get_quit_features(self):
-        return pd.DataFrame([{
-            "job_satisfaction":         self.job_satisfaction,
-            "work_life_balance":        self.work_life_balance,
-            "environment_satisfaction": self.motivation * 4.0,
-            "job_involvement":          self.job_level,
-            "monthly_income":           self.monthly_income,
-            "years_at_company":         self.years_at_company,
-            "total_working_years":      self.total_working_years,
-            "num_companies_worked":     self.num_companies_worked,  # fixed: use actual value
-            "job_level":                self.job_level,
+        df= pd.DataFrame([{
+            "job_satisfaction":           self.job_satisfaction,
+            "work_life_balance":          self.work_life_balance,
+            "environment_satisfaction":   self.motivation * 4.0,
+            "job_involvement":            self.job_level,
+            "monthly_income":             self.monthly_income,
+            "years_at_company":           self.years_at_company,
+            "total_working_years":        self.total_working_years,
+            "num_companies_worked":       self.num_companies_worked,  # fixed: use actual value
+            "job_level":                  self.job_level,
+            "years_since_last_promotion": self.years_since_last_promotion,
+            "years_with_curr_manager":    self.years_with_curr_manager,
+            "performance_rating":         self.performance_rating,
+            "stock_option_level":         self.stock_option_level,
         }])
+        # Engineered features — must match attrition_model.py
+        df['stagnation_score']      = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
+        df['satisfaction_composite'] = (df['job_satisfaction'] + df['work_life_balance'] + df['environment_satisfaction']) / 3
+        df['career_velocity']       = df['job_level'] / (df['total_working_years'] + 1)
+        df['loyalty_index']         = df['years_at_company'] / (df['total_working_years'] + 1)
+
+        return df[quit_features]        
 
     def update_productivity(self):
         self.productivity = productivity_decay(

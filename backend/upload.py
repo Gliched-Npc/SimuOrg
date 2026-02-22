@@ -12,7 +12,7 @@ REQUIRED_COLUMNS = [
     "TotalWorkingYears", "NumCompaniesWorked", "PerformanceRating",
     "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction",
     "JobInvolvement", "Attrition", "YearsSinceLastPromotion",
-    "YearsWithCurrManager",
+    "YearsWithCurrManager","StockOptionLevel"
 ]
 
 
@@ -77,6 +77,14 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df['YearsWithCurrManager'] = pd.to_numeric(df['YearsWithCurrManager'], errors='coerce')
     df['YearsWithCurrManager'] = df['YearsWithCurrManager'].round(0).fillna(0).astype(int)
     df['YearsWithCurrManager'] = df['YearsWithCurrManager'].clip(lower=0)
+
+    # --- StockOptionLevel ---
+    if "StockOptionLevel" in df.columns:
+        df['StockOptionLevel'] = pd.to_numeric(df['StockOptionLevel'], errors='coerce')
+        df['StockOptionLevel'] = df['StockOptionLevel'].round(0).fillna(0).astype(int)
+        df['StockOptionLevel'] = df['StockOptionLevel'].clip(lower=0)
+    else:
+        df['StockOptionLevel']=0
 
     # --- Fill nulls with median for float columns ---
     median_cols = [
@@ -191,6 +199,7 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 attrition                  = row['Attrition'],
                 years_since_last_promotion = int(row['YearsSinceLastPromotion']),
                 years_with_curr_manager    = int(row['YearsWithCurrManager']),
+                stock_option_level         = int(row.get('StockOptionLevel',0)),
             )
             employees.append(emp)
         except Exception as e:

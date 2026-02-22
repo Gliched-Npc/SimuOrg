@@ -4,8 +4,17 @@ from backend.simulation.agent import EmployeeAgent
 from backend.simulation.org_graph import build_org_graph
 import networkx as nx
 import json
-with open("backend/ml/exports/calibration.json") as f:
-    _cal = json.load(f)
+
+try:
+    with open("backend/ml/exports/calibration.json") as f:
+        _cal = json.load(f)
+except FileNotFoundError:
+    _cal = {
+        "stress_gain_rate": 0.0132,
+        "recovery_rate": 0.0104,
+        "shockwave_stress_factor": 0.268,
+        "shockwave_loyalty_factor": 0.093,
+    }
 
 STRESS_GAIN_RATE = _cal["stress_gain_rate"]
 RECOVERY_RATE    = _cal["recovery_rate"]

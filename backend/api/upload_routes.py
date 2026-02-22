@@ -48,7 +48,7 @@ async def upload_dataset(file: UploadFile = File(...)):
 
     # 6. Retrain models and recalibrate on new data
     try:
-        train_attrition_model()
+        model_quality = train_attrition_model()
         train_burnout_estimator()
         cal = calibrate()
     except Exception as e:
@@ -58,10 +58,11 @@ async def upload_dataset(file: UploadFile = File(...)):
         )
 
     return {
-        "status":      "success",
-        "total_rows":  total_rows,
-        "ingested":    result["ingested"],
-        "skipped":     result["skipped"],
-        "warnings":    quality["warnings"],
-        "calibration": cal,
+        "status":        "success",
+        "total_rows":    total_rows,
+        "ingested":      result["ingested"],
+        "skipped":       result["skipped"],
+        "warnings":      quality["warnings"],
+        "model_quality": model_quality,
+        "calibration":   cal,
     }

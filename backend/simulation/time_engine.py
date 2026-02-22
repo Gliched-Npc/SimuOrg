@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 from backend.database import engine
 from backend.models import Employee
 from backend.simulation.agent import EmployeeAgent, quit_model
+from backend.simulation.agent import quit_threshold as QUIT_THRESHOLD
 from backend.simulation.org_graph import build_org_graph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
@@ -23,7 +24,7 @@ except FileNotFoundError:
         "natural_scale":        1.0,
     }
 
-QUIT_THRESHOLD       = calibration["quit_threshold"]
+
 STRESS_THRESHOLD     = calibration["stress_threshold"]
 NATURAL_MONTHLY_RATE = calibration["monthly_natural_rate"]
 
@@ -125,6 +126,9 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None) -> dict
                 new_agent.productivity          = 1.0
                 new_agent.is_active             = True
                 new_agent.burnout_limit         = 0.4
+                new_agent.years_since_last_promotion = 0
+                new_agent.years_with_curr_manager    = 0
+                new_agent.stock_option_level         = 0
                 agents.append(new_agent)
                 G.add_node(new_agent.employee_id, agent=new_agent)
                 if new_agent.manager_id and G.has_node(new_agent.manager_id):
