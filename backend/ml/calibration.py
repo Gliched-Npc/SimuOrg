@@ -16,6 +16,9 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
 
     with Session(engine) as session:
         employees = session.exec(select(Employee)).all()
+    
+    if not employees :
+        raise ValueError("No employees found in database , Run upload/ingest first")
 
     quit_model = joblib.load("backend/ml/exports/quit_probability.pkl")
 
@@ -54,13 +57,16 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     avg_work_life_balance = np.mean([emp.work_life_balance for emp in employees])
 
     # Higher satisfaction = lower base stress gain
-    stress_gain_rate = round(0.03* (1 - (avg_job_satisfaction / 4.0) * 0.5), 4)
-    recovery_rate    = round(0.008 * (avg_work_life_balance / 4.0), 4)
+    stress_gain_rate = round(0.02* (1 - (avg_job_satisfaction / 4.0) * 0.5), 4)
+    recovery_rate    = round(0.015 * (avg_work_life_balance / 4.0), 4)
 
     # Calculate natural attrition scaling factor
     avg_monthly_prob = np.mean([1 - (1 - p) ** (1/12) for p in quit_probs])
     natural_scale = 1
 
+    avg_loyalty = np.mean([min(emp.years_at_company / 10.0, 1.0) for emp in employees])
+    shockwave_stress_factor  = round(0.3 * (1 - avg_loyalty * 0.3), 4)
+    shockwave_loyalty_factor = round(0.1 * (1 - avg_loyalty * 0.2), 4)
     calibration = {
         "quit_threshold":        round(float(np.percentile(quit_probs, 70)), 4),
         "stress_threshold":      round(float(np.percentile(burnout_limits, 30)), 4),
@@ -71,6 +77,8 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
         "stress_gain_rate": stress_gain_rate,
         "recovery_rate":    recovery_rate,
         "natural_scale":    natural_scale,
+        "shockwave_stress_factor":  shockwave_stress_factor,
+        "shockwave_loyalty_factor": shockwave_loyalty_factor,
     }
     os.makedirs("backend/ml/exports", exist_ok=True)
     with open(save_path, "w") as f:

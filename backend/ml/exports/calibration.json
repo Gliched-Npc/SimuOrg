@@ -1,11 +1,13 @@
 {
-  "quit_threshold": 0.3709,
-  "stress_threshold": 0.5,
-  "avg_quit_prob": 0.3364,
-  "avg_burnout_limit": 0.5902,
-  "annual_attrition_rate": 0.1612,
-  "monthly_natural_rate": 0.0145,
-  "stress_gain_rate": 0.0198,
-  "recovery_rate": 0.0055,
-  "natural_scale": 0.373
+  "quit_threshold": 0.4947,
+  "stress_threshold": 0.44,
+  "avg_quit_prob": 0.4374,
+  "avg_burnout_limit": 0.5812,
+  "annual_attrition_rate": 0.2048,
+  "monthly_natural_rate": 0.0189,
+  "stress_gain_rate": 0.0135,
+  "recovery_rate": 0.0103,
+  "natural_scale": 1,
+  "shockwave_stress_factor": 0.2642,
+  "shockwave_loyalty_factor": 0.092
 }

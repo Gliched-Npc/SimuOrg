@@ -1,7 +1,7 @@
 # backend/api/sim_routes.py
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from backend.simulation.monte_carlo import run_monte_carlo
 from backend.simulation.policies import SimulationConfig, get_policy, POLICIES
 
@@ -10,8 +10,15 @@ router = APIRouter(prefix="/api/sim",tags=["Simulation"])
 
 class SimulationRequest(BaseModel):
     policy_name: str = "baseline"
-    runs: int = 10
-    duration_months: int = 12
+    runs: int = Field(default=10,ge=1,le=50)
+    duration_months: int = Field(default=12,ge=1,le=24)
+
+
+class CompareRequest(BaseModel):
+    policy_a: str = "baseline"
+    policy_b: str = "kpi_pressure"
+    runs: int = Field(default=10, ge=1, le=50)
+    duration_months: int = Field(default=12, ge=1, le=24)
 
 
 @router.get("/policies")
@@ -27,13 +34,6 @@ def run_simulation_endpoint(request: SimulationRequest):
     config.duration_months = request.duration_months
     results = run_monte_carlo(config, runs=request.runs)
     return results
-
-class CompareRequest(BaseModel):
-    policy_a: str = "baseline"
-    policy_b: str = "kpi_pressure"
-    runs: int = 10
-    duration_months: int = 12
-
 
 @router.post("/compare")
 def compare_policies(request: CompareRequest):

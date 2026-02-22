@@ -9,7 +9,8 @@ with open("backend/ml/exports/calibration.json") as f:
 
 STRESS_GAIN_RATE = _cal["stress_gain_rate"]
 RECOVERY_RATE    = _cal["recovery_rate"]
-
+_SHOCKWAVE_STRESS_FACTOR  = _cal.get("shockwave_stress_factor", 0.3)
+_SHOCKWAVE_LOYALTY_FACTOR = _cal.get("shockwave_loyalty_factor", 0.1)
 
 def compute_neighbor_influence(agent: EmployeeAgent, G: nx.Graph) -> tuple[float, float]:
     """
@@ -34,7 +35,8 @@ def compute_neighbor_influence(agent: EmployeeAgent, G: nx.Graph) -> tuple[float
 def update_agent_state(agent: EmployeeAgent, 
                        G: nx.Graph, 
                        workload_multiplier: float,
-                       motivation_decay_rate: float):
+                       motivation_decay_rate: float,
+                       stress_gain_rate: float=1.0):
     """
     Update one agent's behavioral state for one timestep.
     """
@@ -88,8 +90,8 @@ def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
         neighbor_agent = G.nodes[neighbor_id].get("agent")
 
         if neighbor_agent and neighbor_agent.is_active:
-            neighbor_agent.stress  += shock_factor * weight* 0.3
-            neighbor_agent.loyalty -= shock_factor * weight
+            neighbor_agent.stress  += shock_factor * weight * _SHOCKWAVE_STRESS_FACTOR
+            neighbor_agent.loyalty -= shock_factor * weight * _SHOCKWAVE_LOYALTY_FACTOR
 
             # Cap values
             neighbor_agent.stress  = min(neighbor_agent.stress, 1.0)

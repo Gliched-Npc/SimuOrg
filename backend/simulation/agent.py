@@ -1,25 +1,33 @@
 import pandas as pd
 import joblib
+import os
 from backend.ml.productivity_decay import productivity_decay
 from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
 
 # Load frozen models once at startup
-quit_model = joblib.load("backend/ml/exports/quit_probability.pkl")
+_QUIT_MODEL_PATH = "backend/ml/exports/quit_probability.pkl"
+if not os.path.exists(_QUIT_MODEL_PATH):
+    raise FileNotFoundError(
+        f"Quit model not found at {_QUIT_MODEL_PATH}. "
+        "Run backend/ml/train.py first."
+    )
+quit_model = joblib.load(_QUIT_MODEL_PATH)
 
 
 class EmployeeAgent:
     def __init__(self, db_employee):
-        self.employee_id         = db_employee.employee_id
-        self.department          = db_employee.department
-        self.job_role            = db_employee.job_role
-        self.job_level           = db_employee.job_level
-        self.manager_id          = db_employee.manager_id
-        self.years_at_company    = db_employee.years_at_company
-        self.total_working_years = db_employee.total_working_years
-        self.monthly_income      = db_employee.monthly_income
-        self.job_satisfaction    = db_employee.job_satisfaction
-        self.work_life_balance   = db_employee.work_life_balance
-        self.performance_rating  = db_employee.performance_rating
+        self.employee_id            = db_employee.employee_id
+        self.department             = db_employee.department
+        self.job_role               = db_employee.job_role
+        self.job_level              = db_employee.job_level
+        self.manager_id             = db_employee.manager_id
+        self.years_at_company       = db_employee.years_at_company
+        self.total_working_years    = db_employee.total_working_years
+        self.num_companies_worked   = db_employee.num_companies_worked  # fixed: use actual value
+        self.monthly_income         = db_employee.monthly_income
+        self.job_satisfaction       = db_employee.job_satisfaction
+        self.work_life_balance      = db_employee.work_life_balance
+        self.performance_rating     = db_employee.performance_rating
 
         self.stress       = 0.0
         self.fatigue      = 0.0
@@ -42,7 +50,7 @@ class EmployeeAgent:
             "monthly_income":           self.monthly_income,
             "years_at_company":         self.years_at_company,
             "total_working_years":      self.total_working_years,
-            "num_companies_worked":     1.0,
+            "num_companies_worked":     self.num_companies_worked,  # fixed: use actual value
             "job_level":                self.job_level,
         }])
 

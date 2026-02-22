@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report,accuracy_score,roc_auc_score
 
 from backend.database import engine
 from backend.models import Employee
@@ -40,6 +40,19 @@ def load_data_from_db():
 def train_attrition_model():
     print("📊 Loading data from database...")
     df = load_data_from_db()
+    n_samples=len(df)
+    # Dynamic max_depth based on dataset size
+    if n_samples < 500:
+        max_depth = 3
+    elif n_samples < 1000:
+        max_depth = 4
+    elif n_samples < 2000:
+        max_depth = 5
+    elif n_samples < 3000:
+        max_depth = 6
+    else:
+        max_depth = 8
+
     # Convert target to binary
     df[TARGET] = df[TARGET].map({"Yes": 1, "No": 0})
 
@@ -55,7 +68,9 @@ def train_attrition_model():
     pipeline = Pipeline([
     ("model", RandomForestClassifier(
         n_estimators=200,
-        max_depth=8,
+        max_depth=max_depth,
+        min_samples_leaf=5,       # ← prevents overfitting
+        min_samples_split=10,   # ← prevents overfitting
         random_state=42,
         class_weight="balanced"
     ))
@@ -66,6 +81,10 @@ def train_attrition_model():
     y_pred = pipeline.predict(X_test)
     print("\n📈 Attrition Model Performance:")
     print(classification_report(y_test, y_pred, target_names=["Stays", "Quits"]))
+
+    y_pred_proba = pipeline.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, y_pred_proba)
+    print(f"\n📈 AUC-ROC: {auc:.4f}")
 
     # Dummy model to check the accuracy
     # from sklearn.dummy import DummyClassifier
@@ -82,7 +101,6 @@ def train_attrition_model():
     print("\n🔍 Test Performance:")
     print(classification_report(y_test, y_pred, target_names=["Stays", "Quits"]))
 
-    from sklearn.metrics import accuracy_score
     train_accuracy = accuracy_score(y_train, pipeline.predict(X_train))
     test_accuracy  = accuracy_score(y_test, y_pred)
 
@@ -106,7 +124,7 @@ if __name__ == "__main__":
 # **What this does simply:**
 # ```
 # Database → load employees
-#          → train logistic regression
+#          → train randomforest
 #          → evaluate accuracy
 #          → save frozen model to ml/exports/
 # ```
