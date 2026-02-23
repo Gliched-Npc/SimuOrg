@@ -35,11 +35,11 @@ def load_agents_from_db() -> list[EmployeeAgent]:
     return [EmployeeAgent(emp) for emp in employees]
 
 
-def run_simulation(config: SimulationConfig = None, agents=None, G=None) -> dict:
+def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_name: str = "custom") -> dict:
     if config is None:
         config = SimulationConfig()
 
-    print("🚀 Starting simulation...")
+    print(f"🚀 Starting simulation — Policy: {policy_name.upper()}")
     if agents is None:
         agents = load_agents_from_db()
     if G is None:
@@ -176,11 +176,31 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None) -> dict
               f"WLB: {avg_wlb:.2f} | "
               f"Loyalty: {avg_loyalty:.2f} | "
               f"Burnout: {burnout_count}")
+    # ── Summary ──
+    total_quits   = sum(l["attrition_count"] for l in logs)
+    total_layoffs = sum(l["layoff_count"] for l in logs)
+    initial_headcount = logs[0]["headcount"] + logs[0]["attrition_count"] + logs[0]["layoff_count"]
+    final_headcount   = logs[-1]["headcount"]
+    attrition_rate    = total_quits / initial_headcount * 100
 
+    print(f"\n{'='*50}")
+    print(f"📊 Simulation Summary — {policy_name.upper()}")
+    print(f"{'='*50}")
+    print(f"   Duration         : {config.duration_months} months")
+    print(f"   Initial Headcount: {initial_headcount}")
+    print(f"   Final Headcount  : {final_headcount}")
+    print(f"   Total Quits      : {total_quits}")
+    print(f"   Total Layoffs    : {total_layoffs}")
+    print(f"   Attrition Rate   : {attrition_rate:.1f}%")
+    print(f"   Final Avg Stress : {logs[-1]['avg_stress']:.3f}")
+    print(f"   Final Productivity: {logs[-1]['avg_productivity']:.3f}")
+    print(f"   Final Burnout    : {logs[-1]['burnout_count']}")
+    print(f"{'='*50}")
     print("✅ Simulation complete.")
     return {"config": config.__dict__, "logs": logs}
 
 
 if __name__ == "__main__":
-    config  = get_policy("baseline")
-    results = run_simulation(config)
+    policy  = "kpi_pressure"
+    config  = get_policy(policy)
+    results = run_simulation(config, policy_name=policy)

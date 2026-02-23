@@ -25,10 +25,10 @@ POLICIES = {
     ),
 
     "kpi_pressure": SimulationConfig(
-        workload_multiplier=1.4,
-        motivation_decay_rate=0.012,
-        shock_factor=0.3,
-        stress_gain_rate=1.5,
+        workload_multiplier=1.3,
+        motivation_decay_rate=0.008,
+        shock_factor=0.25,
+        stress_gain_rate=1.2,
     ),
 
     "hiring_freeze": SimulationConfig(

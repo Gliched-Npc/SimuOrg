@@ -57,7 +57,7 @@ def update_agent_state(agent: EmployeeAgent,
 
     # Step 2 — Update stress
     stress_gain = (
-        STRESS_GAIN_RATE * workload_multiplier +
+        STRESS_GAIN_RATE * workload_multiplier * stress_gain_rate +
         0.01 * neighbor_stress +
         0.005 * agent.fatigue -
         0.001 * min(comm_quality, 5.0)

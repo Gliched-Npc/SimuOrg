@@ -7,12 +7,12 @@ from backend.simulation.org_graph import build_org_graph
 from backend.simulation.policies import SimulationConfig
 
 
-def run_monte_carlo(config: SimulationConfig, runs: int = 50) -> dict:
+def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str = "custom") -> dict:
     """
     Run simulation multiple times and aggregate results.
     Returns mean, min, max, std for each metric across all runs.
     """
-    print(f"🎲 Running Monte Carlo: {runs} simulations...")
+    print(f"🎲 Running Monte Carlo: {runs} simulations — Policy: {policy_name.upper()}")
 
     # Load once, deepcopy per run for speed and consistency
     base_agents = load_agents_from_db()
@@ -24,7 +24,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50) -> dict:
         print(f"   Run {i+1}/{runs}...", end="\r")
         agents_copy = copy.deepcopy(base_agents)
         G_copy      = copy.deepcopy(base_G)
-        result      = run_simulation(config, agents=agents_copy, G=G_copy)
+        result      = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name)
         all_logs.append(result["logs"])
 
     print(f"\n✅ Monte Carlo complete.")

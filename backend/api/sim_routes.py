@@ -32,7 +32,7 @@ def run_simulation_endpoint(request: SimulationRequest):
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_name}")
     config = get_policy(request.policy_name)
     config.duration_months = request.duration_months
-    results = run_monte_carlo(config, runs=request.runs)
+    results = run_monte_carlo(config, runs=request.runs, policy_name=request.policy_name)
     return results
 
 @router.post("/compare")
@@ -48,8 +48,8 @@ def compare_policies(request: CompareRequest):
     config_b = get_policy(request.policy_b)
     config_b.duration_months = request.duration_months
 
-    results_a = run_monte_carlo(config_a, runs=request.runs)
-    results_b = run_monte_carlo(config_b, runs=request.runs)
+    results_a = run_monte_carlo(config_a, runs=request.runs, policy_name=request.policy_a)
+    results_b = run_monte_carlo(config_b, runs=request.runs, policy_name=request.policy_b)
 
     return {
         "policy_a": results_a,
