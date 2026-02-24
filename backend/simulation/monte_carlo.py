@@ -16,14 +16,14 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
 
     # Load once, deepcopy per run for speed and consistency
     base_agents = load_agents_from_db()
-    base_G      = build_org_graph(base_agents)
+    
 
     all_logs = []
 
     for i in range(runs):
         print(f"   Run {i+1}/{runs}...", end="\r")
         agents_copy = copy.deepcopy(base_agents)
-        G_copy      = copy.deepcopy(base_G)
+        G_copy      = build_org_graph(agents_copy)
         result      = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name)
         all_logs.append(result["logs"])
 

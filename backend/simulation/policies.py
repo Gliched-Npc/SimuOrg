@@ -1,6 +1,7 @@
 # backend/simulation/policies.py
 
 from dataclasses import dataclass
+import copy
 
 
 @dataclass
@@ -8,7 +9,7 @@ class SimulationConfig:
     workload_multiplier:    float = 1.0
     motivation_decay_rate:  float = 0.005
     shock_factor:           float = 0.2
-    hiring_active:          bool  = True
+    hiring_active:          bool  = False
     layoff_ratio:           float = 0.0
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
@@ -58,4 +59,4 @@ def get_policy(policy_name: str) -> SimulationConfig:
     if policy_name not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_name}. "
                          f"Available: {list(POLICIES.keys())}")
-    return POLICIES[policy_name]
+    return copy.copy(POLICIES[policy_name])
