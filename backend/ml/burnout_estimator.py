@@ -49,10 +49,3 @@ def train_burnout_estimator():
 
 if __name__ == "__main__":
     train_burnout_estimator()
-# ```
-
-# ---
-
-# Run it:
-# ```
-# python -m backend.ml.burnout_estimator

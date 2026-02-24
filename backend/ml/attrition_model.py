@@ -13,7 +13,8 @@ from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 from backend.database import engine
 from backend.models import Employee
 
-FEATURES = [
+# ── Base features — always present ──
+BASE_FEATURES = [
     "job_satisfaction",
     "work_life_balance",
     "environment_satisfaction",
@@ -30,7 +31,8 @@ FEATURES = [
     "age",
     "distance_from_home",
     "percent_salary_hike",
-    # Engineered features
+    "years_in_current_role",
+    # Engineered
     "stagnation_score",
     "satisfaction_composite",
     "career_velocity",
@@ -38,7 +40,16 @@ FEATURES = [
     "is_single",
 ]
 
+# ── Optional features — used only if present and non-zero variance ──
+OPTIONAL_FEATURES = [
+    "overtime",         # strong predictor — IBM research shows 30%+ attrition for overtime workers
+    "business_travel",  # frequent travelers quit ~2x more
+]
+
 TARGET = "attrition"
+
+# Global — set after training so agent.py and calibration.py use same features
+FEATURES = BASE_FEATURES.copy()
 
 
 def load_data_from_db():
@@ -50,24 +61,14 @@ def load_data_from_db():
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     """Create stronger signals from existing columns."""
-
-    # Stagnation — stuck with no growth
-    df['stagnation_score'] = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
-
-    # Satisfaction composite — average of all satisfaction scores
+    df['stagnation_score']       = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
     df['satisfaction_composite'] = (
-        df['job_satisfaction'] +
-        df['work_life_balance'] +
-        df['environment_satisfaction']
+        df['job_satisfaction'] + df['work_life_balance'] + df['environment_satisfaction']
     ) / 3
+    df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
+    df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 
-    # Career velocity — how fast they're growing relative to experience
-    df['career_velocity'] = df['job_level'] / (df['total_working_years'] + 1)
-
-    # Loyalty index — tenure relative to total experience
-    df['loyalty_index'] = df['years_at_company'] / (df['total_working_years'] + 1)
-
-    # Marital status encoding — single employees quit more
+    # Marital status — single employees quit more
     if 'marital_status' in df.columns:
         df['is_single'] = (df['marital_status'].str.lower() == 'single').astype(int)
     else:
@@ -76,8 +77,25 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def get_active_features(df: pd.DataFrame) -> list[str]:
+    """Determine which features to use based on what's actually in the data."""
+    features = BASE_FEATURES.copy()
+
+    for opt in OPTIONAL_FEATURES:
+        if opt in df.columns:
+            # Only use if it has real variance — not all zeros (default fill)
+            if df[opt].std() > 0:
+                features.append(opt)
+                print(f"  ↳ Optional feature '{opt}' found with signal — added to model")
+            else:
+                print(f"  ↳ Optional feature '{opt}' found but all zeros — skipped")
+        else:
+            print(f"  ↳ Optional feature '{opt}' not in dataset — skipped")
+
+    return features
+
+
 def tune_threshold(model, X_val, y_val) -> float:
-    """Find optimal threshold that maximizes F1 for quit class."""
     probs = model.predict_proba(X_val)[:, 1]
     best_threshold = 0.5
     best_f1 = 0
@@ -94,26 +112,29 @@ def tune_threshold(model, X_val, y_val) -> float:
 
 
 def train_attrition_model():
+    global FEATURES
+
     print("📊 Loading data from database...")
     df = load_data_from_db()
-    # DROP DUPLICATES to stop data leakage!
     df = df.drop(columns=['employee_id', 'simulation_id'], errors='ignore')
     df = df.drop_duplicates()
 
-    # Convert target to binary
     df[TARGET] = df[TARGET].map({"Yes": 1, "No": 0})
     df = df.dropna(subset=[TARGET])
 
     n_samples = len(df)
     print(f"  ↳ {n_samples} employees loaded")
 
-    # Engineer features
     df = engineer_features(df)
+
+    # Determine which features to use based on this dataset
+    FEATURES = get_active_features(df)
+    print(f"  ↳ Using {len(FEATURES)} features "
+          f"({len(BASE_FEATURES)} base + {len(FEATURES) - len(BASE_FEATURES)} optional)")
 
     X = df[FEATURES]
     y = df[TARGET]
 
-    # Dynamic max_depth — capped at 5 to prevent memorization
     if n_samples < 500:
         max_depth = 3
     elif n_samples < 2000:
@@ -123,27 +144,40 @@ def train_attrition_model():
 
     print(f"  ↳ Dataset size: {n_samples} → max_depth: {max_depth}")
 
-    # ── Step 1: 3-way split (train 60% / val 20% / test 20%) ──
+    # 3-way split
     X_trainval, X_test, y_trainval, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     X_train, X_val, y_train, y_val = train_test_split(
         X_trainval, y_trainval, test_size=0.25, random_state=42, stratify=y_trainval
     )
-    # Result: 60% train, 20% val, 20% test
-
     print(f"  ↳ Split: Train={len(X_train)} | Val={len(X_val)} | Test={len(X_test)}")
 
-    # ── Step 2: SMOTE on training set only ──
     negative = (y_train == 0).sum()
     positive = (y_train == 1).sum()
-    print(f"  ↳ Before SMOTE: Stays={negative}, Quits={positive}")
+    imbalance_ratio = round(negative / positive, 1)
 
-    sm = SMOTE(random_state=42)
-    X_train_sm, y_train_sm = sm.fit_resample(X_train, y_train)
-    print(f"  ↳ After SMOTE:  Stays={(y_train_sm==0).sum()}, Quits={(y_train_sm==1).sum()}")
+    # Quick CV to decide imbalance strategy
+    quick_model = XGBClassifier(
+        n_estimators=50, max_depth=max_depth, learning_rate=0.05,
+        scale_pos_weight=imbalance_ratio, random_state=42,
+        eval_metric="logloss", verbosity=0,
+    )
+    quick_cv = cross_val_score(quick_model, X_train, y_train, cv=3, scoring='roc_auc')
+    signal_strength = quick_cv.mean()
 
-    # ── Step 3: XGBoost with regularization ──
+    if signal_strength >= 0.70:
+        sm = SMOTE(random_state=42)
+        X_train_final, y_train_final = sm.fit_resample(X_train, y_train)
+        strategy = "SMOTE"
+        print(f"  ↳ Before SMOTE: Stays={negative}, Quits={positive}")
+        print(f"  ↳ After SMOTE:  Stays={(y_train_final==0).sum()}, Quits={(y_train_final==1).sum()}")
+    else:
+        X_train_final, y_train_final = X_train, y_train
+        strategy = f"scale_pos_weight={imbalance_ratio}"
+        print(f"  ↳ Weak signal (CV AUC {signal_strength:.2f}) — using {strategy} instead of SMOTE")
+
+    # XGBoost with class weighting instead of SMOTE
     model = XGBClassifier(
         n_estimators=200,
         max_depth=max_depth,
@@ -151,31 +185,23 @@ def train_attrition_model():
         subsample=0.8,
         colsample_bytree=0.8,
         min_child_weight=10,
-        reg_alpha=1.0,        # L1 regularization
-        reg_lambda=2.0,       # L2 regularization
+        reg_alpha=1.0,
+        reg_lambda=2.0,
         random_state=42,
         eval_metric="logloss",
         early_stopping_rounds=20,
         verbosity=0,
     )
-    model.fit(
-        X_train_sm, y_train_sm,
-        eval_set=[(X_val, y_val)],
-        verbose=False,
-    )
+    model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
     print(f"  ↳ Best iteration: {model.best_iteration} / 200")
 
-    # ── Step 4: Tune threshold on VALIDATION set (not test!) ──
     print("🔧 Tuning decision threshold on validation set...")
     best_threshold = tune_threshold(model, X_val, y_val)
 
-    # ── Step 5: Evaluate on held-out TEST set ──
-    test_probs = model.predict_proba(X_test)[:, 1]
-    y_pred_test = (test_probs > best_threshold).astype(int)
-
-    # Training eval on real (pre-SMOTE) training data
-    train_probs = model.predict_proba(X_train)[:, 1]
-    y_pred_train = (train_probs > best_threshold).astype(int)
+    test_probs    = model.predict_proba(X_test)[:, 1]
+    y_pred_test   = (test_probs > best_threshold).astype(int)
+    train_probs   = model.predict_proba(X_train)[:, 1]
+    y_pred_train  = (train_probs > best_threshold).astype(int)
 
     train_accuracy = accuracy_score(y_train, y_pred_train)
     test_accuracy  = accuracy_score(y_test, y_pred_test)
@@ -185,7 +211,7 @@ def train_attrition_model():
     print(classification_report(y_test, y_pred_test, target_names=["Stays", "Quits"]))
     print(f"📈 AUC-ROC: {auc:.4f}")
 
-    print("\n🔍 Training Performance (pre-SMOTE train set):")
+    print(f"\n🔍 Training Performance (pre-{strategy} train set):")
     print(classification_report(y_train, y_pred_train, target_names=["Stays", "Quits"]))
 
     print(f"\n📊 Accuracy Summary:")
@@ -194,7 +220,7 @@ def train_attrition_model():
     print(f"  Overfitting Gap   : {(train_accuracy - test_accuracy)*100:.2f}%")
     print(f"  AUC-ROC           : {auc:.4f}")
 
-    # ── Step 6: Cross-validation diagnostic ──
+    # Cross-validation
     print("\n🔬 Cross-Validation Diagnostic (5-fold on full data):")
     cv_model = XGBClassifier(
         n_estimators=model.best_iteration,
@@ -219,20 +245,21 @@ def train_attrition_model():
     if cv_scores.std() > 0.05:
         print("  ⚠️  WARNING: High variance across folds — model reliability is unstable.")
 
-    # ── Step 7: Quality report ──
     cv_mean = float(cv_scores.mean())
     quality_report = {
-        "auc_roc":         round(float(auc), 4),
-        "cv_auc_mean":     round(cv_mean, 4),
-        "cv_auc_std":      round(float(cv_scores.std()), 4),
-        "test_accuracy":   round(float(test_accuracy), 4),
-        "train_accuracy":  round(float(train_accuracy), 4),
-        "signal_strength": (
+        "auc_roc":             round(float(auc), 4),
+        "cv_auc_mean":         round(cv_mean, 4),
+        "cv_auc_std":          round(float(cv_scores.std()), 4),
+        "test_accuracy":       round(float(test_accuracy), 4),
+        "train_accuracy":      round(float(train_accuracy), 4),
+        "features_used":       len(FEATURES),
+        "optional_features":   [f for f in OPTIONAL_FEATURES if f in FEATURES],
+        "signal_strength":     (
             "strong"   if cv_mean >= 0.80 else
             "moderate" if cv_mean >= 0.65 else
             "weak"
         ),
-        "simulation_reliable": cv_mean >= 0.65,
+        "simulation_reliable": bool(cv_mean >= 0.65),
         "recommendation": (
             "Simulation results are reliable."
             if cv_mean >= 0.80 else
@@ -244,14 +271,12 @@ def train_attrition_model():
         ),
     }
 
-    # ── Step 8: Save ──
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(
         {"model": model, "threshold": best_threshold, "features": FEATURES},
         "backend/ml/exports/quit_probability.pkl"
     )
     print("✅ Model saved to backend/ml/exports/quit_probability.pkl")
-
     return quality_report
 
 

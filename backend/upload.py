@@ -2,19 +2,11 @@
 
 import pandas as pd
 from sqlalchemy import text
-from sqlmodel import Session, delete
+from sqlmodel import Session
 from backend.database import engine, init_db
 from backend.models import Employee
 
-REQUIRED_COLUMNS = [
-    "EmployeeID", "Department", "JobRole", "JobLevel",
-    "Age", "Gender", "MonthlyIncome", "YearsAtCompany",
-    "TotalWorkingYears", "NumCompaniesWorked", "PerformanceRating",
-    "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction",
-    "JobInvolvement", "Attrition", "YearsSinceLastPromotion",
-    "YearsWithCurrManager", "StockOptionLevel",
-    "MaritalStatus", "DistanceFromHome", "PercentSalaryHike",
-]
+# ── Column definitions and normalization logic live in backend/schema.py ──
 
 
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -23,10 +15,9 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # --- EmployeeID ---
     df['EmployeeID'] = pd.to_numeric(df['EmployeeID'], errors='coerce')
     df['EmployeeID'] = df['EmployeeID'].round(0)
-    df = df.dropna(subset=['EmployeeID'])  # drop rows with no EmployeeID
+    df = df.dropna(subset=['EmployeeID'])
     df['EmployeeID'] = df['EmployeeID'].astype(int)
 
-    # Remove duplicates after cleaning EmployeeID
     before = len(df)
     df = df.drop_duplicates(subset=['EmployeeID'])
     if len(df) < before:
@@ -41,7 +32,7 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Age ---
     df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-    df['Age'] = df['Age'].round(0).fillna(30).astype(int)
+    df['Age'] = df['Age'].round(0).fillna(35).astype(int)
     df['Age'] = df['Age'].clip(lower=18, upper=80)
 
     # --- JobLevel ---
@@ -80,12 +71,24 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df['YearsWithCurrManager'] = df['YearsWithCurrManager'].clip(lower=0)
 
     # --- StockOptionLevel ---
-    if "StockOptionLevel" in df.columns:
-        df['StockOptionLevel'] = pd.to_numeric(df['StockOptionLevel'], errors='coerce')
-        df['StockOptionLevel'] = df['StockOptionLevel'].round(0).fillna(0).astype(int)
-        df['StockOptionLevel'] = df['StockOptionLevel'].clip(lower=0)
-    else:
-        df['StockOptionLevel']=0
+    df['StockOptionLevel'] = pd.to_numeric(df.get('StockOptionLevel', 0), errors='coerce')
+    df['StockOptionLevel'] = df['StockOptionLevel'].round(0).fillna(0).astype(int)
+    df['StockOptionLevel'] = df['StockOptionLevel'].clip(lower=0)
+
+    # --- DistanceFromHome ---
+    df['DistanceFromHome'] = pd.to_numeric(df.get('DistanceFromHome', 0), errors='coerce')
+    df['DistanceFromHome'] = df['DistanceFromHome'].fillna(0).round(0).astype(int)
+    df['DistanceFromHome'] = df['DistanceFromHome'].clip(lower=0)
+
+    # --- PercentSalaryHike ---
+    df['PercentSalaryHike'] = pd.to_numeric(df.get('PercentSalaryHike', 0), errors='coerce')
+    df['PercentSalaryHike'] = df['PercentSalaryHike'].fillna(0).round(0).astype(int)
+    df['PercentSalaryHike'] = df['PercentSalaryHike'].clip(lower=0)
+
+    # --- YearsInCurrentRole ---
+    df['YearsInCurrentRole'] = pd.to_numeric(df.get('YearsInCurrentRole', 0), errors='coerce')
+    df['YearsInCurrentRole'] = df['YearsInCurrentRole'].round(0).fillna(0).astype(int)
+    df['YearsInCurrentRole'] = df['YearsInCurrentRole'].clip(lower=0)
 
     # --- Fill nulls with median for float columns ---
     median_cols = [
@@ -100,51 +103,32 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             if missing > 0:
                 print(f"  ↳ {col}: filled {missing} nulls with median")
 
-    # --- Clip satisfaction scores to valid 1-4 range ---
+    # --- Clip satisfaction scores ---
     for col in ['JobSatisfaction', 'WorkLifeBalance', 'EnvironmentSatisfaction']:
         df[col] = df[col].clip(lower=1.0, upper=4.0)
 
-    # --- NumCompaniesWorked ---
     df['NumCompaniesWorked'] = df['NumCompaniesWorked'].clip(lower=0)
-
-    # --- TotalWorkingYears ---
-    df['TotalWorkingYears'] = df['TotalWorkingYears'].clip(lower=0)
-
-    # --- DistanceFromHome ---
-    if 'DistanceFromHome' in df.columns:
-        df['DistanceFromHome'] = pd.to_numeric(df['DistanceFromHome'], errors='coerce')
-        df['DistanceFromHome'] = df['DistanceFromHome'].fillna(0).round(0).astype(int)
-        df['DistanceFromHome'] = df['DistanceFromHome'].clip(lower=0)
-    else:
-        df['DistanceFromHome'] = 0
-
-    # --- PercentSalaryHike ---
-    if 'PercentSalaryHike' in df.columns:
-        df['PercentSalaryHike'] = pd.to_numeric(df['PercentSalaryHike'], errors='coerce')
-        df['PercentSalaryHike'] = df['PercentSalaryHike'].fillna(0).round(0).astype(int)
-        df['PercentSalaryHike'] = df['PercentSalaryHike'].clip(lower=0)
-    else:
-        df['PercentSalaryHike'] = 0
+    df['TotalWorkingYears']  = df['TotalWorkingYears'].clip(lower=0)
 
     # --- Normalize string columns ---
-    
-    df['Attrition']  = df['Attrition'].fillna('No').str.strip().str.capitalize()
-    df['Attrition']  = df['Attrition'].map({'Yes': 'Yes', 'No': 'No'}).fillna('No')
-    df['Gender']     = df['Gender'].fillna('Unknown').str.strip().str.capitalize()
-    df['JobRole']    = df['JobRole'].fillna('Unknown').str.strip().str.title()
-    df['Department'] = df['Department'].fillna('Unknown').str.strip().str.title()
-    df['MaritalStatus'] = df.get('MaritalStatus', pd.Series(['Unknown']*len(df))).fillna('Unknown').str.strip().str.capitalize()
+    df['Attrition']     = df['Attrition'].fillna('No')
+    df['Gender']        = df['Gender'].fillna('Unknown').str.strip().str.capitalize()
+    df['JobRole']       = df['JobRole'].fillna('Unknown').str.strip().str.title()
+    df['Department']    = df['Department'].fillna('Unknown').str.strip().str.title()
+    df['MaritalStatus'] = df['MaritalStatus'].fillna('Unknown').str.strip().str.capitalize()
+
+    # NOTE: OverTime is already encoded to `overtime` by schema.normalize_dataframe()
+    # before clean_dataframe() is called — no re-encoding needed here.
 
     print(f"✅ Cleaning done. {len(df)} rows ready.")
     return df
 
+
 def validate_data_quality(df: pd.DataFrame) -> dict:
     warnings = []
     errors   = []
+    total    = len(df)
 
-    total = len(df)
-
-    # Attrition rate check
     attrition_count = (df['Attrition'] == 'Yes').sum()
     attrition_rate  = attrition_count / total
     if attrition_rate > 0.30:
@@ -153,22 +137,16 @@ def validate_data_quality(df: pd.DataFrame) -> dict:
             f"(industry average is 10-20%). Data may be unreliable."
         )
 
-    # Minimum employee count
     if total < 50:
         warnings.append(
             f"Small dataset: only {total} employees. "
             f"Simulation results may not be statistically reliable."
         )
 
-    # Duplicate check after cleaning
     duplication_rate = 1 - (total / (total + df.duplicated().sum()))
     if duplication_rate > 0.20:
-        warnings.append(
-            f"High duplication rate detected before cleaning. "
-            f"Data quality may be poor."
-        )
+        warnings.append("High duplication rate detected before cleaning. Data quality may be poor.")
 
-    # JobLevel sanity
     invalid_levels = ((df['JobLevel'] < 1) | (df['JobLevel'] > 5)).sum()
     if invalid_levels > total * 0.10:
         warnings.append(
@@ -176,7 +154,6 @@ def validate_data_quality(df: pd.DataFrame) -> dict:
             f"These were clipped automatically."
         )
 
-    # Negative income check
     negative_income = (df['MonthlyIncome'] < 0).sum()
     if negative_income > 0:
         warnings.append(
@@ -185,6 +162,7 @@ def validate_data_quality(df: pd.DataFrame) -> dict:
         )
 
     return {"warnings": warnings, "errors": errors, "passed": len(errors) == 0}
+
 
 def ingest_from_dataframe(df: pd.DataFrame) -> dict:
     employees = []
@@ -217,10 +195,13 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 attrition                  = row['Attrition'],
                 years_since_last_promotion = int(row['YearsSinceLastPromotion']),
                 years_with_curr_manager    = int(row['YearsWithCurrManager']),
-                stock_option_level         = int(row.get('StockOptionLevel',0)),
+                stock_option_level         = int(row.get('StockOptionLevel', 0)),
                 marital_status             = str(row.get('MaritalStatus', 'Unknown')),
                 distance_from_home         = int(row.get('DistanceFromHome', 0)),
                 percent_salary_hike        = int(row.get('PercentSalaryHike', 0)),
+                years_in_current_role      = int(row.get('YearsInCurrentRole', 0)),
+                overtime                   = int(row.get('overtime', 0)),
+                business_travel            = int(row.get('business_travel', 0)),
             )
             employees.append(emp)
         except Exception as e:
@@ -228,7 +209,6 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
             skipped += 1
             continue
 
-    # TRUNCATE is instant and guaranteed — bypasses SQLAlchemy batching
     with Session(engine) as session:
         session.exec(text("TRUNCATE TABLE employee RESTART IDENTITY CASCADE"))
         session.commit()

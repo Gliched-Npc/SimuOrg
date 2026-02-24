@@ -17,16 +17,10 @@ try:
     with open("backend/ml/exports/calibration.json") as f:
         calibration = json.load(f)
 except FileNotFoundError:
-    calibration = {
-        "quit_threshold":       0.37,
-        "stress_threshold":     0.5,
-        "monthly_natural_rate": 0.0145,
-        "natural_scale":        1.0,
-    }
+    calibration = {"prob_scale": 1.0, "stress_amplification": 2.0, "monthly_natural_rate": 0.0145}
 
-
-STRESS_THRESHOLD     = calibration["stress_threshold"]
-NATURAL_MONTHLY_RATE = calibration["monthly_natural_rate"]
+STRESS_THRESHOLD     = calibration.get("stress_threshold", 0.5)
+NATURAL_MONTHLY_RATE = calibration.get("monthly_natural_rate", 0.0145)
 
 
 def load_agents_from_db() -> list[EmployeeAgent]:
@@ -45,11 +39,8 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
     if G is None:
         G = build_org_graph(agents)
 
-    # Track max ID to avoid new hire collisions
     max_id = max(a.employee_id for a in agents)
-
-    logs = []
-
+    logs   =  []
     for month in range(1, config.duration_months + 1):
         print(f"📅 Month {month}...")
 
@@ -60,15 +51,14 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
                     agent, G,
                     workload_multiplier   = config.workload_multiplier,
                     motivation_decay_rate = config.motivation_decay_rate,
-                    stress_gain_rate      = config.stress_gain_rate,  # now passed correctly
+                    stress_gain_rate      = config.stress_gain_rate,
                 )
 
-        # Step 2 — Layoffs (before voluntary attrition)
+        # Step 2 — Layoffs
         layoff_agents = []
         if config.layoff_ratio > 0:
-            active = [a for a in agents if a.is_active]
-            n_layoffs = int(len(active) * config.layoff_ratio)
-            # Lay off lowest performers first
+            active     = [a for a in agents if a.is_active]
+            n_layoffs  = int(len(active) * config.layoff_ratio)
             layoff_targets = sorted(active, key=lambda a: a.performance_rating)[:n_layoffs]
             for agent in layoff_targets:
                 layoff_agents.append(agent)
@@ -76,56 +66,53 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
         # Step 3 — Voluntary attrition
         quitting_agents = []
         for agent in agents:
-            if not agent.is_active:
+            if not agent.is_active or agent in layoff_agents:
                 continue
-            if agent in layoff_agents:
-                continue  # already being laid off
 
             yearly_prob  = quit_model.predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
-            # Natural attrition
             if random.random() < NATURAL_MONTHLY_RATE:
                 quitting_agents.append(agent)
                 continue
 
-            # Stress-driven attrition
             if agent.stress > STRESS_THRESHOLD and yearly_prob > QUIT_THRESHOLD:
                 if random.random() < monthly_prob:
                     quitting_agents.append(agent)
 
-        # Step 4 — Process all departures (layoffs + voluntary)
-        all_departures = layoff_agents + quitting_agents
-        for agent in all_departures:
+        # Step 4 — Process departures
+        for agent in layoff_agents + quitting_agents:
             apply_attrition_shockwave(agent, G, config.shock_factor)
             agent.is_active = False
             if G.has_node(agent.employee_id):
                 G.remove_node(agent.employee_id)
 
-        # Step 5 — Hiring (only replaces voluntary quits, not layoffs)
+        # Step 5 — Hiring (replaces voluntary quits only)
         if config.hiring_active:
             for quitter in quitting_agents:
-                max_id += 1  # safe unique ID
+                max_id += 1
                 new_agent = EmployeeAgent.__new__(EmployeeAgent)
-                new_agent.employee_id           = max_id
-                new_agent.department            = quitter.department
-                new_agent.job_role              = quitter.job_role
-                new_agent.job_level             = quitter.job_level
-                new_agent.manager_id            = quitter.manager_id
-                new_agent.years_at_company      = 0
-                new_agent.total_working_years   = 0
-                new_agent.num_companies_worked  = 1.0
-                new_agent.monthly_income        = quitter.monthly_income
-                new_agent.job_satisfaction      = 3.0
-                new_agent.work_life_balance     = 3.0
-                new_agent.performance_rating    = 3
-                new_agent.stress                = 0.1
-                new_agent.fatigue               = 0.0
-                new_agent.motivation            = 0.75
-                new_agent.loyalty               = 0.1
-                new_agent.productivity          = 1.0
-                new_agent.is_active             = True
-                new_agent.burnout_limit         = 0.4
+                new_agent.employee_id                = max_id
+                new_agent.department                 = quitter.department
+                new_agent.job_role                   = quitter.job_role
+                new_agent.job_level                  = quitter.job_level
+                new_agent.manager_id                 = quitter.manager_id
+                new_agent.years_at_company           = 0
+                new_agent.total_working_years        = 0
+                new_agent.num_companies_worked       = 1.0
+                new_agent.monthly_income             = quitter.monthly_income
+                new_agent.job_satisfaction           = 3.0
+                new_agent.work_life_balance          = 3.0
+                new_agent.environment_satisfaction   = 3.0
+                new_agent.job_involvement            = 3
+                new_agent.performance_rating         = 3
+                new_agent.stress                     = 0.1
+                new_agent.fatigue                    = 0.0
+                new_agent.motivation                 = 0.75
+                new_agent.loyalty                    = 0.1
+                new_agent.productivity               = 1.0
+                new_agent.is_active                  = True
+                new_agent.burnout_limit              = 0.4
                 new_agent.years_since_last_promotion = 0
                 new_agent.years_with_curr_manager    = 0
                 new_agent.stock_option_level         = 0
@@ -133,6 +120,11 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
                 new_agent.distance_from_home         = quitter.distance_from_home
                 new_agent.percent_salary_hike        = 15
                 new_agent.marital_status             = quitter.marital_status
+                # Inherit overtime/travel status from quitter — same role, same expectations
+                new_agent.overtime                   = quitter.overtime
+                new_agent.business_travel            = quitter.business_travel
+                new_agent.years_in_current_role      = 0  # fresh hire, new role
+
                 agents.append(new_agent)
                 G.add_node(new_agent.employee_id, agent=new_agent)
                 if new_agent.manager_id and G.has_node(new_agent.manager_id):
@@ -143,14 +135,14 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
                         edge_type="manager"
                     )
 
-        # Step 6 — Compute metrics
+        # Step 6 — Metrics
         active_agents    = [a for a in agents if a.is_active]
-        avg_stress       = np.mean([a.stress       for a in active_agents])
-        avg_productivity = np.mean([a.productivity for a in active_agents])
-        avg_motivation   = np.mean([a.motivation   for a in active_agents])
-        avg_job_sat      = np.mean([a.job_satisfaction   for a in active_agents])
-        avg_wlb          = np.mean([a.work_life_balance  for a in active_agents])
-        avg_loyalty      = np.mean([a.loyalty      for a in active_agents])
+        avg_stress       = np.mean([a.stress            for a in active_agents])
+        avg_productivity = np.mean([a.productivity      for a in active_agents])
+        avg_motivation   = np.mean([a.motivation        for a in active_agents])
+        avg_job_sat      = np.mean([a.job_satisfaction  for a in active_agents])
+        avg_wlb          = np.mean([a.work_life_balance for a in active_agents])
+        avg_loyalty      = np.mean([a.loyalty           for a in active_agents])
         burnout_count    = sum(1 for a in active_agents if a.stress > a.burnout_limit)
 
         logs.append({
@@ -176,9 +168,11 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
               f"WLB: {avg_wlb:.2f} | "
               f"Loyalty: {avg_loyalty:.2f} | "
               f"Burnout: {burnout_count}")
-    # ── Summary ──
-    total_quits   = sum(l["attrition_count"] for l in logs)
-    total_layoffs = sum(l["layoff_count"] for l in logs)
+
+
+    # Summary
+    total_quits       = sum(l["attrition_count"] for l in logs)
+    total_layoffs     = sum(l["layoff_count"] for l in logs)
     initial_headcount = logs[0]["headcount"] + logs[0]["attrition_count"] + logs[0]["layoff_count"]
     final_headcount   = logs[-1]["headcount"]
     attrition_rate    = total_quits / initial_headcount * 100
@@ -186,17 +180,18 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
     print(f"\n{'='*50}")
     print(f"📊 Simulation Summary — {policy_name.upper()}")
     print(f"{'='*50}")
-    print(f"   Duration         : {config.duration_months} months")
-    print(f"   Initial Headcount: {initial_headcount}")
-    print(f"   Final Headcount  : {final_headcount}")
-    print(f"   Total Quits      : {total_quits}")
-    print(f"   Total Layoffs    : {total_layoffs}")
-    print(f"   Attrition Rate   : {attrition_rate:.1f}%")
-    print(f"   Final Avg Stress : {logs[-1]['avg_stress']:.3f}")
+    print(f"   Duration          : {config.duration_months} months")
+    print(f"   Initial Headcount : {initial_headcount}")
+    print(f"   Final Headcount   : {final_headcount}")
+    print(f"   Total Quits       : {total_quits}")
+    print(f"   Total Layoffs     : {total_layoffs}")
+    print(f"   Attrition Rate    : {attrition_rate:.1f}%")
+    print(f"   Final Avg Stress  : {logs[-1]['avg_stress']:.3f}")
     print(f"   Final Productivity: {logs[-1]['avg_productivity']:.3f}")
-    print(f"   Final Burnout    : {logs[-1]['burnout_count']}")
+    print(f"   Final Burnout     : {logs[-1]['burnout_count']}")
     print(f"{'='*50}")
     print("✅ Simulation complete.")
+
     return {"config": config.__dict__, "logs": logs}
 
 

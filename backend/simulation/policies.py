@@ -1,7 +1,7 @@
 # backend/simulation/policies.py
 
-from dataclasses import dataclass
 import copy
+from dataclasses import dataclass
 
 
 @dataclass

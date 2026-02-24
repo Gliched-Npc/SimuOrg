@@ -1,8 +1,8 @@
 {
-  "quit_threshold": 0.48,
-  "stress_threshold": 0.46,
-  "avg_quit_prob": 0.2326,
-  "avg_burnout_limit": 0.5783,
+  "quit_threshold": 0.4,
+  "stress_threshold": 0.5,
+  "avg_quit_prob": 0.2211,
+  "avg_burnout_limit": 0.5902,
   "annual_attrition_rate": 0.1612,
   "monthly_natural_rate": 0.0145,
   "stress_gain_rate": 0.0132,
