@@ -26,44 +26,41 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     tuned_threshold = _saved["threshold"]
     saved_features  = _saved["features"]  # use exact features model was trained on
 
-    quit_probs    = []
-    burnout_limits = []
-    labels=[]
-    for emp in employees:
-        df_emp = pd.DataFrame([{
-            "job_satisfaction":            emp.job_satisfaction,
-            "work_life_balance":           emp.work_life_balance,
-            "environment_satisfaction":    emp.environment_satisfaction,
-            "job_involvement":             emp.job_involvement,
-            "monthly_income":              emp.monthly_income,
-            "years_at_company":            emp.years_at_company,
-            "total_working_years":         emp.total_working_years,
-            "num_companies_worked":        emp.num_companies_worked,
-            "job_level":                   emp.job_level,
-            "years_since_last_promotion":  emp.years_since_last_promotion,
-            "years_with_curr_manager":     emp.years_with_curr_manager,
-            "performance_rating":          emp.performance_rating,
-            "stock_option_level":          emp.stock_option_level,
-            "age":                         emp.age,
-            "distance_from_home":          emp.distance_from_home,
-            "percent_salary_hike":         emp.percent_salary_hike,
-            "years_in_current_role":       getattr(emp, "years_in_current_role", 0) or 0,
-            "marital_status":              emp.marital_status,
-            # Optional — only present if dataset had OverTime / BusinessTravel
-            "overtime":                    getattr(emp, "overtime", 0) or 0,
-            "business_travel":             getattr(emp, "business_travel", 0) or 0,
-        }])
-        df_emp = engineer_features(df_emp)
+    # ── Batch prediction (vectorized — replaces per-employee loop) ──
+    records = [{
+        "job_satisfaction":           emp.job_satisfaction,
+        "work_life_balance":          emp.work_life_balance,
+        "environment_satisfaction":   emp.environment_satisfaction,
+        "job_involvement":            emp.job_involvement,
+        "monthly_income":             emp.monthly_income,
+        "years_at_company":           emp.years_at_company,
+        "total_working_years":        emp.total_working_years,
+        "num_companies_worked":       emp.num_companies_worked,
+        "job_level":                  emp.job_level,
+        "years_since_last_promotion": emp.years_since_last_promotion,
+        "years_with_curr_manager":    emp.years_with_curr_manager,
+        "performance_rating":         emp.performance_rating,
+        "stock_option_level":         emp.stock_option_level,
+        "age":                        emp.age,
+        "distance_from_home":         emp.distance_from_home,
+        "percent_salary_hike":        emp.percent_salary_hike,
+        "years_in_current_role":      getattr(emp, "years_in_current_role", 0) or 0,
+        "marital_status":             emp.marital_status,
+        "overtime":                   getattr(emp, "overtime", 0) or 0,
+        "business_travel":            getattr(emp, "business_travel", 0) or 0,
+        "attrition":                  emp.attrition,
+    } for emp in employees]
 
-        # Use only the features the model was actually trained on
-        prob = quit_model.predict_proba(df_emp[saved_features])[0][1]
-        quit_probs.append(prob)
-        burnout_limits.append(burnout_threshold(emp.job_level, emp.total_working_years))
-        labels.append(1 if emp.attrition == "Yes" else 0)
+    df_all = pd.DataFrame(records)
+    df_all = engineer_features(df_all)
 
-    quit_probs     = np.array(quit_probs)
-    burnout_limits = np.array(burnout_limits)
-    labels         = np.array(labels)
+    # Single batch call — massively faster than N individual predict_proba calls
+    quit_probs     = quit_model.predict_proba(df_all[saved_features])[:, 1]
+    burnout_limits = np.array([
+        burnout_threshold(emp.job_level, emp.total_working_years) for emp in employees
+    ])
+    labels = (df_all["attrition"] == "Yes").astype(int).values
+
 
     attrition_counts = sum(1 for emp in employees if emp.attrition == "Yes")
     total            = len(employees)

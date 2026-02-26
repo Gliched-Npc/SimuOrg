@@ -9,15 +9,19 @@ from backend.upload import clean_dataframe, ingest_from_dataframe, validate_data
 from backend.ml.attrition_model import train_attrition_model
 from backend.ml.burnout_estimator import train_burnout_estimator
 from backend.ml.calibration import calibrate
+import backend.simulation.agent as _agent_module  # needed to bust lazy-load cache
 
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
 
 
 @router.post("/dataset")
 async def upload_dataset(file: UploadFile = File(...)):
-    # 1. Validate file type
+    # 1. Validate file provided and type
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided. Please select a CSV file to upload.")
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted.")
+
 
     # 2. Read CSV
     contents = await file.read()
@@ -58,6 +62,8 @@ async def upload_dataset(file: UploadFile = File(...)):
         model_quality = train_attrition_model()
         train_burnout_estimator()
         cal = calibrate()
+        # Bust the lazy-load cache so the next simulation uses the new model
+        _agent_module._quit_model_cache = None
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -65,12 +71,20 @@ async def upload_dataset(file: UploadFile = File(...)):
         )
 
     return {
-        "status":        "success",
-        "total_rows":    total_rows,
-        "ingested":      result["ingested"],
-        "skipped":       result["skipped"],
-        "warnings":      quality["warnings"],
-        "schema_report": schema_report,
-        "model_quality": model_quality,
-        "calibration":   cal,
+        "status":  "success",
+        "rows":    result["ingested"],
+        "skipped": result["skipped"],
+        "model": {
+            "auc_roc":        model_quality.get("auc_roc"),
+            "cv_auc_mean":    model_quality.get("cv_auc_mean"),
+            "features":       model_quality.get("features_used"),
+            "signal":         model_quality.get("signal_strength"),
+            "recommendation": model_quality.get("recommendation"),
+        },
+        "calibration": {
+            "annual_attrition_rate": cal.get("annual_attrition_rate"),
+            "monthly_natural_rate":  cal.get("monthly_natural_rate"),
+            "quit_threshold":        cal.get("quit_threshold"),
+        },
+        "warnings": quality["warnings"] or None,
     }

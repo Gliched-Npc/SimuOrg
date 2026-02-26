@@ -6,8 +6,7 @@ import numpy as np
 from sqlmodel import Session, select
 from backend.database import engine
 from backend.models import Employee
-from backend.simulation.agent import EmployeeAgent, quit_model
-from backend.simulation.agent import quit_threshold as QUIT_THRESHOLD
+from backend.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
 from backend.simulation.org_graph import build_org_graph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
@@ -69,14 +68,14 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
             if not agent.is_active or agent in layoff_agents:
                 continue
 
-            yearly_prob  = quit_model.predict_proba(agent.get_quit_features())[0][1]
+            yearly_prob  = _quit_model().predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
             if random.random() < NATURAL_MONTHLY_RATE:
                 quitting_agents.append(agent)
                 continue
 
-            if agent.stress > STRESS_THRESHOLD and yearly_prob > QUIT_THRESHOLD:
+            if agent.stress > STRESS_THRESHOLD and yearly_prob > _quit_threshold():
                 if random.random() < monthly_prob:
                     quitting_agents.append(agent)
 
@@ -104,6 +103,8 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
                 new_agent.job_satisfaction           = 3.0
                 new_agent.work_life_balance          = 3.0
                 new_agent.environment_satisfaction   = 3.0
+                new_agent.baseline_satisfaction      = 3.0
+                new_agent.baseline_wlb               = 3.0
                 new_agent.job_involvement            = 3
                 new_agent.performance_rating         = 3
                 new_agent.stress                     = 0.1
@@ -196,6 +197,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
 
 
 if __name__ == "__main__":
-    policy  = "kpi_pressure"
+    policy  = "baseline"
     config  = get_policy(policy)
     results = run_simulation(config, policy_name=policy)

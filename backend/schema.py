@@ -328,13 +328,70 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Step 1c — Encode string satisfaction/rating columns to numeric 1-4 scale.
+    Handles datasets that use 'Low/Medium/High/Very High' instead of integers.
+    IBM HR datasets use integers already — those pass through unchanged.
+    Detection uses pd.to_numeric (robust) rather than dtype check.
+    """
+    level_map = {
+        "very low":       1, "low":           1, "poor":          1,
+        "below average":  2, "medium":         2, "average":       2, "fair":          2,
+        "high":           3, "good":           3, "above average": 3,
+        "very high":      4, "excellent":      4, "outstanding":   4,
+    }
+
+    satisfaction_cols = [
+        "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction",
+        "JobInvolvement", "PerformanceRating",
+    ]
+
+    for col in satisfaction_cols:
+        if col not in df.columns:
+            continue
+        # Check if any values are non-numeric (i.e., strings like 'Low', 'High')
+        numeric_attempt = pd.to_numeric(df[col], errors="coerce")
+        has_string_values = numeric_attempt.isna().any() and df[col].notna().any()
+        if has_string_values:
+            encoded = df[col].apply(
+                lambda x: level_map.get(str(x).strip().lower(), None)
+            )
+            mapped_mask = encoded.notna()
+            df[col] = df[col].where(~mapped_mask, encoded)  # only overwrite mapped rows
+            if mapped_mask.sum() > 0:
+                print(f"  ↳ {col}: {mapped_mask.sum()} string labels encoded to 1-4")
+
+    # ── JobLevel: encode string tiers to numeric scale ──
+    # Handles 'Entry/Mid/Senior' style datasets instead of integers 1-5.
+    job_level_map = {
+        "entry":        1, "entry level":  1, "junior":       1,
+        "associate":    2, "intermediate": 2,
+        "mid":          3, "middle":       3,
+        "lead":         4, "manager":      4,
+        "senior":       5, "sr":           5, "director":     5, "executive":    5,
+    }
+    if "JobLevel" in df.columns:
+        numeric_attempt = pd.to_numeric(df["JobLevel"], errors="coerce")
+        if numeric_attempt.isna().any() and df["JobLevel"].notna().any():
+            encoded = df["JobLevel"].apply(
+                lambda x: job_level_map.get(str(x).strip().lower(), None)
+            )
+            mapped_mask = encoded.notna()
+            df["JobLevel"] = df["JobLevel"].where(~mapped_mask, encoded)
+            print(f"  ↳ JobLevel: {mapped_mask.sum()} string tiers encoded (Entry=1 Mid=3 Senior=5)")
+
+    return df
+
+
 def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str], bool, bool]:
     """
     Full normalization pipeline — call this in upload_routes.py.
     Returns (normalized_df, missing_optional, found_optional, overtime_was_present, travel_was_present).
     """
     df = normalize_columns(df)
-    df = derive_missing_columns(df)          # ← new: handle dataset-specific derivations
+    df = derive_missing_columns(df)          # handle dataset-specific derivations
+    df = encode_satisfaction_scores(df)      # convert Low/High/Very High → 1-4 BEFORE cleaning
     overtime_was_present = "OverTime" in df.columns  # capture BEFORE encode drops it
     travel_was_present   = "BusinessTravel" in df.columns
     df = normalize_attrition(df)
