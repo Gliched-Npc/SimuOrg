@@ -3,8 +3,10 @@
 import pandas as pd
 import joblib
 import os
+import random
 from backend.ml.productivity_decay import productivity_decay
 from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
+from backend.ml.attrition_model import engineer_features
 
 # Lazy-loaded — model is loaded on first use, not at import time.
 # This allows the server to start even if no model has been trained yet.
@@ -105,24 +107,15 @@ class EmployeeAgent:
             "distance_from_home":         self.distance_from_home,
             "percent_salary_hike":        self.percent_salary_hike,
             "years_in_current_role":      self.years_in_current_role,
-            "marital_status":             self.marital_status or "Unknown",
+            "marital_status":             self.marital_status or random.choice(["Single", "Married", "Divorced"]),
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
             "business_travel":            self.business_travel,
         }
         df = pd.DataFrame([raw])
-
-        # Engineered features
-        df["stagnation_score"]       = df["years_since_last_promotion"] / (df["years_at_company"] + 1)
-        df["satisfaction_composite"] = (
-            df["job_satisfaction"] + df["work_life_balance"] + df["environment_satisfaction"]
-        ) / 3
-        df["career_velocity"]  = df["job_level"] / (df["total_working_years"] + 1)
-        df["loyalty_index"]    = df["years_at_company"] / (df["total_working_years"] + 1)
-        df["is_single"]        = (df["marital_status"].str.lower() == "single").astype(int)
-
-        # Return only the features the model was trained on — nothing more, nothing less
+        df = engineer_features(df)
         return df[_quit_features()]
+
 
     def update_productivity(self):
         self.productivity = productivity_decay(

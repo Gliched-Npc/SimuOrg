@@ -72,11 +72,24 @@ def update_agent_state(agent: EmployeeAgent,
         agent.fatigue = max(agent.fatigue - 0.01, 0.0)
 
     # Step 4 — Update motivation
-    agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
+    if agent.stress > 0.4:
+        agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
+    else:
+        # Recover slowly back to their personal baseline
+        agent.motivation = min(agent.motivation + 0.01, agent.baseline_satisfaction / 4.0)
 
-    # Step 5 — Sync satisfaction with motivation
-    agent.job_satisfaction = max(1.0, agent.motivation * 4.0)
-    agent.work_life_balance = max(1.0, (1.0 - agent.stress) * 4.0)
+    # Step 5 — Sync satisfaction with motivation and stress, capped at baseline
+    agent.job_satisfaction = max(1.0, min(4.0, agent.motivation * 4.0))
+    
+    # WLB drifts down slowly from baseline based on stress (requires crossing 0.2 buffer)
+    perceptible_stress = max(0.0, agent.stress - 0.2)
+    target_wlb = max(1.0, min(4.0, agent.baseline_wlb - (perceptible_stress * 1.5)))
+    
+    # Smooth the drop so it doesn't crash all at once (max drop of 0.15 per month)
+    if target_wlb < agent.work_life_balance:
+        agent.work_life_balance = max(target_wlb, agent.work_life_balance - 0.15)
+    else:
+        agent.work_life_balance = min(target_wlb, agent.work_life_balance + 0.1)
 
     # Step 6 — Update productivity
     agent.update_productivity()

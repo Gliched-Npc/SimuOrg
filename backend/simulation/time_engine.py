@@ -20,6 +20,7 @@ except FileNotFoundError:
 
 STRESS_THRESHOLD     = calibration.get("stress_threshold", 0.5)
 NATURAL_MONTHLY_RATE = calibration.get("monthly_natural_rate", 0.0145)
+PROB_SCALE           = calibration.get("prob_scale", 0.5424)
 
 
 def load_agents_from_db() -> list[EmployeeAgent]:
@@ -71,13 +72,8 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
             yearly_prob  = _quit_model().predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
-            if random.random() < NATURAL_MONTHLY_RATE:
+            if random.random() < monthly_prob * PROB_SCALE:
                 quitting_agents.append(agent)
-                continue
-
-            if agent.stress > STRESS_THRESHOLD and yearly_prob > _quit_threshold():
-                if random.random() < monthly_prob:
-                    quitting_agents.append(agent)
 
         # Step 4 — Process departures
         for agent in layoff_agents + quitting_agents:

@@ -9,14 +9,17 @@ class SimulationConfig:
     workload_multiplier:    float = 1.0
     motivation_decay_rate:  float = 0.005
     shock_factor:           float = 0.2
-    hiring_active:          bool  = False
+    hiring_active:          bool  = True
     layoff_ratio:           float = 0.0
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
 
 
 POLICIES = {
-    "baseline": SimulationConfig(),
+    "baseline": SimulationConfig(
+        shock_factor=0.0,
+        stress_gain_rate=0.75,
+    ),
 
     "remote_work": SimulationConfig(
         workload_multiplier=0.9,

@@ -214,6 +214,7 @@ def train_attrition_model():
         min_child_weight=10,
         reg_alpha=1.0,
         reg_lambda=2.0,
+        scale_pos_weight=1 if strategy == "SMOTE" else imbalance_ratio,
         random_state=42,
         eval_metric="logloss",
         early_stopping_rounds=20,
