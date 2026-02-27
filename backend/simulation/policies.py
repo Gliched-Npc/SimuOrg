@@ -1,5 +1,6 @@
 # backend/simulation/policies.py
 
+import copy
 from dataclasses import dataclass
 
 
@@ -12,10 +13,14 @@ class SimulationConfig:
     layoff_ratio:           float = 0.0
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
+    overtime_bonus:         float = 0.0
 
 
 POLICIES = {
-    "baseline": SimulationConfig(),
+    "baseline": SimulationConfig(
+        shock_factor=0.0,
+        stress_gain_rate=0.75,
+    ),
 
     "remote_work": SimulationConfig(
         workload_multiplier=0.9,
@@ -25,10 +30,10 @@ POLICIES = {
     ),
 
     "kpi_pressure": SimulationConfig(
-        workload_multiplier=1.4,
-        motivation_decay_rate=0.012,
-        shock_factor=0.3,
-        stress_gain_rate=1.5,
+        workload_multiplier=1.3,
+        motivation_decay_rate=0.008,
+        shock_factor=0.25,
+        stress_gain_rate=1.2,
     ),
 
     "hiring_freeze": SimulationConfig(
@@ -51,6 +56,14 @@ POLICIES = {
         workload_multiplier=1.1,
         shock_factor=0.2,
     ),
+
+    "overtime_pay": SimulationConfig(
+        workload_multiplier=1.4,
+        motivation_decay_rate=0.005,
+        shock_factor=0.25,
+        stress_gain_rate=1.2,
+        overtime_bonus=1.0,
+    ),
 }
 
 
@@ -58,4 +71,4 @@ def get_policy(policy_name: str) -> SimulationConfig:
     if policy_name not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_name}. "
                          f"Available: {list(POLICIES.keys())}")
-    return POLICIES[policy_name]
+    return copy.copy(POLICIES[policy_name])
