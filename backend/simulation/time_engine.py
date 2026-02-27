@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from backend.database import engine
 from backend.models import Employee
 from backend.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
-from backend.simulation.org_graph import build_org_graph
+from backend.simulation.org_graph import build_org_graph, OrgGraph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
 
@@ -29,7 +29,7 @@ def load_agents_from_db() -> list[EmployeeAgent]:
     return [EmployeeAgent(emp) for emp in employees]
 
 
-def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_name: str = "custom") -> dict:
+def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=None, policy_name: str = "custom") -> dict:
     if config is None:
         config = SimulationConfig()
 
@@ -193,6 +193,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G=None, policy_
 
 
 if __name__ == "__main__":
-    policy  = "baseline"
+    policy  = "remote_work"
     config  = get_policy(policy)
     results = run_simulation(config, policy_name=policy)

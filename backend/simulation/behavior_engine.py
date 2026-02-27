@@ -1,8 +1,7 @@
 # backend/simulation/behavior_engine.py
 
 from backend.simulation.agent import EmployeeAgent
-from backend.simulation.org_graph import build_org_graph
-import networkx as nx
+from backend.simulation.org_graph import build_org_graph, OrgGraph
 import json
 
 try:
@@ -21,7 +20,7 @@ RECOVERY_RATE    = _cal["recovery_rate"]
 _SHOCKWAVE_STRESS_FACTOR  = _cal.get("shockwave_stress_factor", 0.3)
 _SHOCKWAVE_LOYALTY_FACTOR = _cal.get("shockwave_loyalty_factor", 0.1)
 
-def compute_neighbor_influence(agent: EmployeeAgent, G: nx.Graph) -> tuple[float, float]:
+def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float, float]:
     """
     Read stress from neighbors weighted by edge weight.
     Returns (neighbor_stress, comm_quality)
@@ -42,7 +41,7 @@ def compute_neighbor_influence(agent: EmployeeAgent, G: nx.Graph) -> tuple[float
 
 
 def update_agent_state(agent: EmployeeAgent, 
-                       G: nx.Graph, 
+                       G: OrgGraph, 
                        workload_multiplier: float,
                        motivation_decay_rate: float,
                        stress_gain_rate: float=1.0):
@@ -101,7 +100,7 @@ def update_agent_state(agent: EmployeeAgent,
 
 
 def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
-                               G: nx.Graph,
+                               G: OrgGraph,
                                shock_factor: float):
     """
     When an agent quits, their neighbors feel the impact.
