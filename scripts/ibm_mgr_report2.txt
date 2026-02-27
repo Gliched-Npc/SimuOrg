@@ -1,0 +1,4 @@
+  File "<string>", line 13
+    print(f'EmployeeID range: {d[" EmployeeID\].min()}-{d[\EmployeeID\].max()},
+          ^
+SyntaxError: unterminated string literal (detected at line 13)

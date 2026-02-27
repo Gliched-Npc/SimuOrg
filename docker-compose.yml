@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:15
+    container_name: simuorg_copy_db
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: simuorg_copy_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:

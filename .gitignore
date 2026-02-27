@@ -1,0 +1,24 @@
+# --- SECURITY ---
+.env
+.venv
+venv/
+__pycache__/
+*.pyc
+*.pkl
+*.joblib
+
+# --- DATA PROTECTION ---
+backend/data/*.csv
+backend/data/*.xlsx
+*.csv
+
+# --- FRONTEND ---
+node_modules/
+dist/
+.DS_Store
+BACKEND_LOG.md
+FRONTEND_DOCS.md
+FRONTEND_LOG.md
+SIMUORG_DOCS.md
+
+ML_PERFORMANCE_README.md
