@@ -44,7 +44,8 @@ def update_agent_state(agent: EmployeeAgent,
                        G: OrgGraph, 
                        workload_multiplier: float,
                        motivation_decay_rate: float,
-                       stress_gain_rate: float=1.0):
+                       stress_gain_rate: float=1.0,
+                       overtime_bonus: float=0.0):
     """
     Update one agent's behavioral state for one timestep.
     """
@@ -78,7 +79,9 @@ def update_agent_state(agent: EmployeeAgent,
         agent.motivation = min(agent.motivation + 0.01, agent.baseline_satisfaction / 4.0)
 
     # Step 5 — Sync satisfaction with motivation and stress, capped at baseline
-    agent.job_satisfaction = max(1.0, min(4.0, agent.motivation * 4.0))
+    # Overtime pay provides an artificial monetary buffer to Job Satisfaction
+    base_satisfaction = (agent.motivation * 4.0) + overtime_bonus
+    agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
     
     # WLB drifts down slowly from baseline based on stress (requires crossing 0.2 buffer)
     perceptible_stress = max(0.0, agent.stress - 0.2)
@@ -91,7 +94,7 @@ def update_agent_state(agent: EmployeeAgent,
         agent.work_life_balance = min(target_wlb, agent.work_life_balance + 0.1)
 
     # Step 6 — Update productivity
-    agent.update_productivity()
+    agent.update_productivity(workload_multiplier)
 
     # Step 7 — Burnout acceleration
     if agent.stress > agent.burnout_limit:

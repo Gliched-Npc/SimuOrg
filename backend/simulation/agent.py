@@ -117,12 +117,13 @@ class EmployeeAgent:
         return df[_quit_features()]
 
 
-    def update_productivity(self):
+    def update_productivity(self, workload_multiplier: float = 1.0):
         self.productivity = productivity_decay(
             stress=self.stress,
             fatigue=self.fatigue,
             job_satisfaction=self.job_satisfaction,
-            work_life_balance=self.work_life_balance
+            work_life_balance=self.work_life_balance,
+            workload_multiplier=workload_multiplier
         )
 
     def __repr__(self):

@@ -193,6 +193,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
 
 if __name__ == "__main__":
-    policy  = "remote_work"
+    policy  = "overtime_pay"
     config  = get_policy(policy)
     results = run_simulation(config, policy_name=policy)
