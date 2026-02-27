@@ -9,7 +9,7 @@ from backend.models import Employee
 # ── Column definitions and normalization logic live in backend/schema.py ──
 
 
-def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     print("🧹 Cleaning data...")
 
     # --- EmployeeID ---
@@ -20,8 +20,9 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     before = len(df)
     df = df.drop_duplicates(subset=['EmployeeID'])
-    if len(df) < before:
-        print(f"  ↳ Removed {before - len(df)} duplicate EmployeeIDs")
+    duplicates_removed = before - len(df)
+    if duplicates_removed > 0:
+        print(f"  ↳ Removed {duplicates_removed} duplicate EmployeeIDs")
 
     # --- ManagerID ---
     if 'ManagerID' in df.columns:
@@ -121,10 +122,10 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # before clean_dataframe() is called — no re-encoding needed here.
 
     print(f"✅ Cleaning done. {len(df)} rows ready.")
-    return df
+    return df, duplicates_removed
 
 
-def validate_data_quality(df: pd.DataFrame) -> dict:
+def validate_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> dict:
     warnings = []
     errors   = []
     total    = len(df)
@@ -143,7 +144,11 @@ def validate_data_quality(df: pd.DataFrame) -> dict:
             f"Simulation results may not be statistically reliable."
         )
 
-    duplication_rate = 1 - (total / (total + df.duplicated().sum()))
+    duplication_rate = (
+        duplicates_removed / (total + duplicates_removed)
+        if (total + duplicates_removed) > 0
+        else 0
+    )
     if duplication_rate > 0.20:
         warnings.append("High duplication rate detected before cleaning. Data quality may be poor.")
 
@@ -234,7 +239,7 @@ def ingest_data():
     from backend.schema import normalize_dataframe
     df, *_ = normalize_dataframe(df)   # same normalization as Swagger path
     print(f"📄 Cleaning...")
-    df = clean_dataframe(df)
+    df, _ = clean_dataframe(df)
     ingest_from_dataframe(df)
 
 

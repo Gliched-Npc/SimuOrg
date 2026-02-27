@@ -52,6 +52,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                     workload_multiplier   = config.workload_multiplier,
                     motivation_decay_rate = config.motivation_decay_rate,
                     stress_gain_rate      = config.stress_gain_rate,
+                    overtime_bonus        = config.overtime_bonus,
                 )
 
         # Step 2 — Layoffs

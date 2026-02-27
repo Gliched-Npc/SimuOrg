@@ -46,9 +46,9 @@ async def upload_dataset(file: UploadFile = File(...)):
     schema_report = build_schema_report(df, missing_optional, found_optional, overtime_was_present, travel_was_present)
 
     # 6. Clean + validate data quality
-    df = clean_dataframe(df)
+    df, duplicates_removed = clean_dataframe(df)
     total_rows = len(df)
-    quality = validate_data_quality(df)
+    quality = validate_data_quality(df, duplicates_removed=duplicates_removed)
 
     # 7. Ingest
     init_db()
