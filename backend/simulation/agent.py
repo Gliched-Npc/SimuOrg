@@ -3,20 +3,39 @@
 import pandas as pd
 import joblib
 import os
+import random
 from backend.ml.productivity_decay import productivity_decay
 from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
+from backend.ml.attrition_model import engineer_features
 
-# Load frozen models once at startup
+# Lazy-loaded — model is loaded on first use, not at import time.
+# This allows the server to start even if no model has been trained yet.
 _QUIT_MODEL_PATH = "backend/ml/exports/quit_probability.pkl"
-if not os.path.exists(_QUIT_MODEL_PATH):
-    raise FileNotFoundError(
-        f"Quit model not found at {_QUIT_MODEL_PATH}. "
-        "Run backend/ml/train.py first."
-    )
-_saved         = joblib.load(_QUIT_MODEL_PATH)
-quit_model     = _saved["model"]
-quit_threshold = _saved["threshold"]
-quit_features  = _saved["features"]  # exact feature list model was trained on
+_quit_model_cache = None
+
+
+def _get_quit_model():
+    """Load (and cache) the quit model on first call."""
+    global _quit_model_cache
+    if _quit_model_cache is None:
+        if not os.path.exists(_QUIT_MODEL_PATH):
+            raise FileNotFoundError(
+                f"Quit model not found at {_QUIT_MODEL_PATH}. "
+                "Please upload a dataset first via POST /api/upload/dataset."
+            )
+        _saved = joblib.load(_QUIT_MODEL_PATH)
+        _quit_model_cache = {
+            "model":     _saved["model"],
+            "threshold": _saved["threshold"],
+            "features":  _saved["features"],
+        }
+    return _quit_model_cache
+
+
+# Convenience aliases — resolved lazily on first simulation call
+def _quit_model():     return _get_quit_model()["model"]
+def _quit_threshold(): return _get_quit_model()["threshold"]
+def _quit_features():  return _get_quit_model()["features"]
 
 
 class EmployeeAgent:
@@ -50,9 +69,12 @@ class EmployeeAgent:
         self.business_travel = getattr(db_employee, "business_travel", 0) or 0
 
         # Simulation state
+        self.baseline_satisfaction= db_employee.job_satisfaction
+        self.baseline_wlb         = db_employee.work_life_balance
+        
         self.stress       = 0.0
         self.fatigue      = 0.0
-        self.motivation   = db_employee.job_satisfaction / 4.0
+        self.motivation   = self.baseline_satisfaction / 4.0
         self.loyalty      = min(db_employee.years_at_company / 10.0, 1.0)
         self.is_active    = True
         self.productivity = 1.0
@@ -65,7 +87,7 @@ class EmployeeAgent:
     def get_quit_features(self):
         """
         Build feature dict matching exact features the model was trained on.
-        Uses quit_features (loaded from saved model) to ensure alignment.
+        Lazy-loads the model on first call via _quit_features().
         """
         raw = {
             "job_satisfaction":           self.job_satisfaction,
@@ -85,31 +107,23 @@ class EmployeeAgent:
             "distance_from_home":         self.distance_from_home,
             "percent_salary_hike":        self.percent_salary_hike,
             "years_in_current_role":      self.years_in_current_role,
-            "marital_status":             self.marital_status,
+            "marital_status":             self.marital_status or random.choice(["Single", "Married", "Divorced"]),
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
             "business_travel":            self.business_travel,
         }
         df = pd.DataFrame([raw])
+        df = engineer_features(df)
+        return df[_quit_features()]
 
-        # Engineered features
-        df["stagnation_score"]       = df["years_since_last_promotion"] / (df["years_at_company"] + 1)
-        df["satisfaction_composite"] = (
-            df["job_satisfaction"] + df["work_life_balance"] + df["environment_satisfaction"]
-        ) / 3
-        df["career_velocity"]  = df["job_level"] / (df["total_working_years"] + 1)
-        df["loyalty_index"]    = df["years_at_company"] / (df["total_working_years"] + 1)
-        df["is_single"]        = (df["marital_status"].str.lower() == "single").astype(int)
 
-        # Return only the features the model was trained on — nothing more, nothing less
-        return df[quit_features]
-
-    def update_productivity(self):
+    def update_productivity(self, workload_multiplier: float = 1.0):
         self.productivity = productivity_decay(
             stress=self.stress,
             fatigue=self.fatigue,
             job_satisfaction=self.job_satisfaction,
-            work_life_balance=self.work_life_balance
+            work_life_balance=self.work_life_balance,
+            workload_multiplier=workload_multiplier
         )
 
     def __repr__(self):

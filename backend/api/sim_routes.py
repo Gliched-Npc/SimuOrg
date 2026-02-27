@@ -28,12 +28,32 @@ def list_policies():
 
 @router.post("/run")
 def run_simulation_endpoint(request: SimulationRequest):
+    import os
+    from sqlmodel import Session, select
+    from backend.database import engine
+    from backend.models import Employee
+
+    if not os.path.exists("backend/ml/exports/quit_probability.pkl"):
+        raise HTTPException(
+            status_code=400,
+            detail="No trained model found. Please upload a dataset first via POST /api/upload/dataset."
+        )
+
+    with Session(engine) as session:
+        count = session.exec(select(Employee)).all()
+    if not count:
+        raise HTTPException(
+            status_code=400,
+            detail="No employee data in database. Please upload a dataset first via POST /api/upload/dataset."
+        )
+
     if request.policy_name not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_name}")
     config = get_policy(request.policy_name)
     config.duration_months = request.duration_months
     results = run_monte_carlo(config, runs=request.runs, policy_name=request.policy_name)
     return results
+
 
 @router.post("/compare")
 def compare_policies(request: CompareRequest):

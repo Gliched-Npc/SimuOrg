@@ -9,26 +9,42 @@
 import pandas as pd
 
 # ── Hard required — upload fails without these ──
+# Kept minimal: only columns that BOTH the IBM HR dataset and
+# generic HR CSVs (e.g. Kaggle train.csv) are likely to have.
 REQUIRED_COLUMNS = [
-    "EmployeeID", "Department", "JobRole", "JobLevel",
-    "MonthlyIncome", "YearsAtCompany", "TotalWorkingYears",
-    "NumCompaniesWorked", "JobSatisfaction", "WorkLifeBalance",
-    "EnvironmentSatisfaction", "JobInvolvement", "PerformanceRating",
+    "EmployeeID",
+    "JobLevel",
+    "MonthlyIncome",
+    "YearsAtCompany",
+    "JobSatisfaction",
+    "WorkLifeBalance",
+    "PerformanceRating",
     "Attrition",
 ]
 
 # ── Optional — filled with defaults if missing ──
+# IBM HR-specific columns that the new dataset may not have.
 OPTIONAL_COLUMNS = {
+    # Identity / org structure
     "ManagerID":               0,
-    "Age":                     35,
+    "Department":              "General",   # new dataset has no Dept
+    "JobRole":                 "Unknown",
     "Gender":                  "Unknown",
+    "Age":                     35,
     "MaritalStatus":           "Unknown",
+    # Financial
     "DistanceFromHome":        0,
     "PercentSalaryHike":       0,
     "StockOptionLevel":        0,
+    # Experience (IBM-specific — not in all datasets)
+    "TotalWorkingYears":       0,  # will be derived from YearsAtCompany if missing
+    "NumCompaniesWorked":      1,
     "YearsSinceLastPromotion": 0,
     "YearsWithCurrManager":    0,
     "YearsInCurrentRole":      0,
+    # Satisfaction (IBM-specific)
+    "EnvironmentSatisfaction": 3,  # reasonable default (scale 1-4)
+    "JobInvolvement":          3,
     # OverTime and BusinessTravel handled separately — need encoding
 }
 
@@ -39,7 +55,8 @@ HIGH_VALUE_COLUMNS = {
 }
 
 # ── Column name aliases ──
-# Maps any known variation to our canonical schema name
+# Maps any known variation → our canonical schema name.
+# Covers IBM HR dataset (CamelCase) AND generic HR CSVs (spaces/mixed).
 COLUMN_ALIASES = {
     # EmployeeID
     "EmployeeNumber":             "EmployeeID",
@@ -62,10 +79,10 @@ COLUMN_ALIASES = {
     "Salary":                     "MonthlyIncome",
     "monthly_salary":             "MonthlyIncome",
 
-    # Tenure
+    # Tenure — 'Years at Company' and 'Company Tenure' both map here
     "Years at Company":           "YearsAtCompany",
     "Years_at_Company":           "YearsAtCompany",
-    "Company Tenure":             "YearsAtCompany",
+    "Company Tenure":             "CompanyTenure",  # kept separate (see derive step)
     "Tenure":                     "YearsAtCompany",
 
     # Total experience
@@ -81,7 +98,7 @@ COLUMN_ALIASES = {
     "Environment Satisfaction":   "EnvironmentSatisfaction",
     "Environment_Satisfaction":   "EnvironmentSatisfaction",
 
-    # Other fields
+    # Other IBM HR fields
     "Performance Rating":         "PerformanceRating",
     "Job Involvement":            "JobInvolvement",
     "Num Companies Worked":       "NumCompaniesWorked",
@@ -98,12 +115,24 @@ COLUMN_ALIASES = {
     "Over Time":                  "OverTime",
     "over_time":                  "OverTime",
     "overtime":                   "OverTime",
+    "Overtime":                   "OverTime",          # new dataset uses 'Overtime'
 
     # BusinessTravel
     "Business Travel":            "BusinessTravel",
     "Business_Travel":            "BusinessTravel",
     "business_travel":            "BusinessTravel",
     "Travel":                     "BusinessTravel",
+
+    # ── New dataset specific aliases ──
+    "Number of Promotions":       "NumberOfPromotions",  # → derive YearsSinceLastPromotion
+    "Number of Dependents":       "NumberOfDependents",  # stored but not used in ML
+    "Education Level":            "EducationLevel",      # stored but not used in ML
+    "Company Size":               "CompanySize",         # stored but not used in ML
+    "Remote Work":                "RemoteWork",          # optional ML feature
+    "Leadership Opportunities":   "LeadershipOpportunities",
+    "Innovation Opportunities":   "InnovationOpportunities",
+    "Company Reputation":         "CompanyReputation",
+    "Employee Recognition":       "EmployeeRecognition",
 }
 
 # ── Attrition value sets ──
@@ -262,12 +291,107 @@ def build_schema_report(
     }
 
 
+def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Step 1b — Derive columns from alternative sources when primary is missing.
+    Handles new dataset formats that don't have IBM HR column names.
+    """
+    # CompanyTenure → YearsAtCompany (new dataset has both 'Years at Company'
+    # AND 'Company Tenure' as separate cols. Use 'CompanyTenure' as fallback.)
+    if "YearsAtCompany" not in df.columns and "CompanyTenure" in df.columns:
+        df["YearsAtCompany"] = df["CompanyTenure"]
+        print("  ↳ YearsAtCompany: derived from CompanyTenure")
+
+    # TotalWorkingYears — new dataset doesn't have this. Proxy = YearsAtCompany.
+    if "TotalWorkingYears" not in df.columns and "YearsAtCompany" in df.columns:
+        df["TotalWorkingYears"] = df["YearsAtCompany"]
+        print("  ↳ TotalWorkingYears: derived from YearsAtCompany (proxy)")
+
+    # NumberOfPromotions → YearsSinceLastPromotion (inverse relationship:
+    # more promotions ≈ promoted recently → fewer years since last promotion)
+    if "YearsSinceLastPromotion" not in df.columns and "NumberOfPromotions" in df.columns:
+        import numpy as np
+        promo = pd.to_numeric(df["NumberOfPromotions"], errors="coerce").fillna(0)
+        # Simple inversion: 0 promotions → ~3 years, 5+ → ~0 years
+        df["YearsSinceLastPromotion"] = (3 / (promo + 1)).round(0).astype(int)
+        print("  ↳ YearsSinceLastPromotion: derived from NumberOfPromotions (inverted)")
+
+    # JobRole — new dataset has 'Job Role' which is already aliased. If still missing, default.
+    if "JobRole" not in df.columns:
+        df["JobRole"] = "Unknown"
+
+    # Department — new dataset doesn't have Dept; default to "General"
+    if "Department" not in df.columns:
+        df["Department"] = "General"
+        print("  ↳ Department: not found — defaulted to 'General'")
+
+    return df
+
+
+def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Step 1c — Encode string satisfaction/rating columns to numeric 1-4 scale.
+    Handles datasets that use 'Low/Medium/High/Very High' instead of integers.
+    IBM HR datasets use integers already — those pass through unchanged.
+    Detection uses pd.to_numeric (robust) rather than dtype check.
+    """
+    level_map = {
+        "very low":       1, "low":           1, "poor":          1,
+        "below average":  2, "medium":         2, "average":       2, "fair":          2,
+        "high":           3, "good":           3, "above average": 3,
+        "very high":      4, "excellent":      4, "outstanding":   4,
+    }
+
+    satisfaction_cols = [
+        "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction",
+        "JobInvolvement", "PerformanceRating",
+    ]
+
+    for col in satisfaction_cols:
+        if col not in df.columns:
+            continue
+        # Check if any values are non-numeric (i.e., strings like 'Low', 'High')
+        numeric_attempt = pd.to_numeric(df[col], errors="coerce")
+        has_string_values = numeric_attempt.isna().any() and df[col].notna().any()
+        if has_string_values:
+            encoded = df[col].apply(
+                lambda x: level_map.get(str(x).strip().lower(), None)
+            )
+            mapped_mask = encoded.notna()
+            df[col] = df[col].where(~mapped_mask, encoded)  # only overwrite mapped rows
+            if mapped_mask.sum() > 0:
+                print(f"  ↳ {col}: {mapped_mask.sum()} string labels encoded to 1-4")
+
+    # ── JobLevel: encode string tiers to numeric scale ──
+    # Handles 'Entry/Mid/Senior' style datasets instead of integers 1-5.
+    job_level_map = {
+        "entry":        1, "entry level":  1, "junior":       1,
+        "associate":    2, "intermediate": 2,
+        "mid":          3, "middle":       3,
+        "lead":         4, "manager":      4,
+        "senior":       5, "sr":           5, "director":     5, "executive":    5,
+    }
+    if "JobLevel" in df.columns:
+        numeric_attempt = pd.to_numeric(df["JobLevel"], errors="coerce")
+        if numeric_attempt.isna().any() and df["JobLevel"].notna().any():
+            encoded = df["JobLevel"].apply(
+                lambda x: job_level_map.get(str(x).strip().lower(), None)
+            )
+            mapped_mask = encoded.notna()
+            df["JobLevel"] = df["JobLevel"].where(~mapped_mask, encoded)
+            print(f"  ↳ JobLevel: {mapped_mask.sum()} string tiers encoded (Entry=1 Mid=3 Senior=5)")
+
+    return df
+
+
 def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str], bool, bool]:
     """
     Full normalization pipeline — call this in upload_routes.py.
     Returns (normalized_df, missing_optional, found_optional, overtime_was_present, travel_was_present).
     """
     df = normalize_columns(df)
+    df = derive_missing_columns(df)          # handle dataset-specific derivations
+    df = encode_satisfaction_scores(df)      # convert Low/High/Very High → 1-4 BEFORE cleaning
     overtime_was_present = "OverTime" in df.columns  # capture BEFORE encode drops it
     travel_was_present   = "BusinessTravel" in df.columns
     df = normalize_attrition(df)

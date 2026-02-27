@@ -4,8 +4,8 @@ from sqlmodel import SQLModel, Field
 class Employee(SQLModel, table=True):
     # Identity
     employee_id: int = Field(primary_key=True)
-    department: str
-    job_role: str
+    department: str = Field(default="General")
+    job_role: str = Field(default="Unknown")
     job_level: int
     manager_id: Optional[int] = Field(default=None)
     simulation_id: str = Field(default="master", index=True)

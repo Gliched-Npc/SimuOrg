@@ -42,8 +42,13 @@ BASE_FEATURES = [
 
 # ── Optional features — used only if present and non-zero variance ──
 OPTIONAL_FEATURES = [
-    "overtime",         # strong predictor — IBM research shows 30%+ attrition for overtime workers
-    "business_travel",  # frequent travelers quit ~2x more
+    "overtime",                   # strong predictor — IBM research shows 30%+ attrition for overtime workers
+    "business_travel",            # frequent travelers quit ~2x more
+    # New dataset columns — used if present and have signal
+    "leadership_opportunities",   # encoded 0/1 — lack of growth = attrition signal
+    "innovation_opportunities",   # encoded 0/1
+    "company_reputation",         # encoded 0/1
+    "employee_recognition",       # encoded 0/1
 ]
 
 TARGET = "attrition"
@@ -78,8 +83,25 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_active_features(df: pd.DataFrame) -> list[str]:
-    """Determine which features to use based on what's actually in the data."""
-    features = BASE_FEATURES.copy()
+    """
+    Determine which features to use based on what's actually in the data.
+    - BASE_FEATURES with zero variance (e.g. all-default columns) are dropped.
+    - OPTIONAL_FEATURES are added only if present and have real signal.
+    """
+    features = []
+
+    # Filter base features — drop any that are flat (zero variance)
+    dropped_base = []
+    for feat in BASE_FEATURES:
+        if feat not in df.columns:
+            continue
+        if df[feat].std() > 0:
+            features.append(feat)
+        else:
+            dropped_base.append(feat)
+
+    if dropped_base:
+        print(f"  ↳ Dropped {len(dropped_base)} zero-variance base features: {dropped_base}")
 
     for opt in OPTIONAL_FEATURES:
         if opt in df.columns:
@@ -93,6 +115,7 @@ def get_active_features(df: pd.DataFrame) -> list[str]:
             print(f"  ↳ Optional feature '{opt}' not in dataset — skipped")
 
     return features
+
 
 
 def tune_threshold(model, X_val, y_val) -> float:
@@ -129,8 +152,12 @@ def train_attrition_model():
 
     # Determine which features to use based on this dataset
     FEATURES = get_active_features(df)
+    active_base     = [f for f in FEATURES if f in BASE_FEATURES]
+    active_optional = [f for f in FEATURES if f in OPTIONAL_FEATURES]
+    dropped_base    = [f for f in BASE_FEATURES if f not in FEATURES]
     print(f"  ↳ Using {len(FEATURES)} features "
-          f"({len(BASE_FEATURES)} base + {len(FEATURES) - len(BASE_FEATURES)} optional)")
+          f"({len(active_base)} base + {len(active_optional)} optional"
+          + (f", dropped {len(dropped_base)}: {dropped_base}" if dropped_base else "") + ")")
 
     X = df[FEATURES]
     y = df[TARGET]
@@ -232,7 +259,6 @@ def train_attrition_model():
         min_child_weight=10,
         reg_alpha=1.0,
         reg_lambda=2.0,
-        scale_pos_weight=1 if strategy == "SMOTE" else imbalance_ratio,
         random_state=42,
         eval_metric="logloss",
         verbosity=0,

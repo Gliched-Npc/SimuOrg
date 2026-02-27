@@ -230,7 +230,10 @@ def ingest_data():
         print("❌ Error: File not found in backend/data/")
         return
 
-    print(f"📄 Found {len(df)} rows. Cleaning...")
+    print(f"📄 Found {len(df)} rows. Normalizing...")
+    from backend.schema import normalize_dataframe
+    df, *_ = normalize_dataframe(df)   # same normalization as Swagger path
+    print(f"📄 Cleaning...")
     df = clean_dataframe(df)
     ingest_from_dataframe(df)
 
