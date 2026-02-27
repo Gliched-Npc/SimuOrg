@@ -40,6 +40,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
         G = build_org_graph(agents)
 
     max_id = max(a.employee_id for a in agents)
+    initial_headcount = len([a for a in agents if a.is_active])
     logs   =  []
     for month in range(1, config.duration_months + 1):
         print(f"📅 Month {month}...")
@@ -171,7 +172,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     # Summary
     total_quits       = sum(l["attrition_count"] for l in logs)
     total_layoffs     = sum(l["layoff_count"] for l in logs)
-    initial_headcount = logs[0]["headcount"] + logs[0]["attrition_count"] + logs[0]["layoff_count"]
     final_headcount   = logs[-1]["headcount"]
     attrition_rate    = total_quits / initial_headcount * 100
 

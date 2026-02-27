@@ -36,16 +36,15 @@ OPTIONAL_COLUMNS = {
     "DistanceFromHome":        0,
     "PercentSalaryHike":       0,
     "StockOptionLevel":        0,
-    # Experience (IBM-specific — not in all datasets)
-    "TotalWorkingYears":       0,  # will be derived from YearsAtCompany if missing
+    # Experience 
+    "TotalWorkingYears":       0,  
     "NumCompaniesWorked":      1,
     "YearsSinceLastPromotion": 0,
     "YearsWithCurrManager":    0,
     "YearsInCurrentRole":      0,
-    # Satisfaction (IBM-specific)
-    "EnvironmentSatisfaction": 3,  # reasonable default (scale 1-4)
+    # Satisfaction 
+    "EnvironmentSatisfaction": 3,  
     "JobInvolvement":          3,
-    # OverTime and BusinessTravel handled separately — need encoding
 }
 
 # ── High-value optional features — shown in schema report if missing ──
@@ -56,7 +55,6 @@ HIGH_VALUE_COLUMNS = {
 
 # ── Column name aliases ──
 # Maps any known variation → our canonical schema name.
-# Covers IBM HR dataset (CamelCase) AND generic HR CSVs (spaces/mixed).
 COLUMN_ALIASES = {
     # EmployeeID
     "EmployeeNumber":             "EmployeeID",
@@ -82,7 +80,7 @@ COLUMN_ALIASES = {
     # Tenure — 'Years at Company' and 'Company Tenure' both map here
     "Years at Company":           "YearsAtCompany",
     "Years_at_Company":           "YearsAtCompany",
-    "Company Tenure":             "CompanyTenure",  # kept separate (see derive step)
+    "Company Tenure":             "CompanyTenure",  
     "Tenure":                     "YearsAtCompany",
 
     # Total experience
