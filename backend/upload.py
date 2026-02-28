@@ -25,11 +25,8 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         print(f"  ↳ Removed {duplicates_removed} duplicate EmployeeIDs")
 
     # --- ManagerID ---
-    if 'ManagerID' in df.columns:
-        df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
-        df['ManagerID'] = df['ManagerID'].round(0).fillna(0).astype(int)
-    else:
-        df['ManagerID'] = 0
+    df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
+    df['ManagerID'] = df['ManagerID'].round(0).fillna(0).astype(int)
 
     # --- Age ---
     df['Age'] = pd.to_numeric(df['Age'], errors='coerce')

@@ -31,7 +31,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
 
     # 3. Normalize — column names, attrition values, overtime encoding, defaults
-    df, missing_optional, found_optional, overtime_was_present, travel_was_present = normalize_dataframe(df)
+    df, missing_optional, found_optional, overtime_was_present = normalize_dataframe(df)
 
     # 4. Validate required columns (after normalization)
     missing_required = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -43,7 +43,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         )
 
     # 5. Build schema report
-    schema_report = build_schema_report(df, missing_optional, found_optional, overtime_was_present, travel_was_present)
+    schema_report = build_schema_report(df, missing_optional, found_optional, overtime_was_present)
 
     # 6. Clean + validate data quality
     df, duplicates_removed = clean_dataframe(df)

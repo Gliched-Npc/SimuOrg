@@ -19,10 +19,3 @@ def init_db():
 def get_session():
     with Session(engine) as session:
         yield session
-# ```
-
-# ---
-
-# **Step 4 — Install python-dotenv if you haven't:**
-# ```
-# pip install python-dotenv

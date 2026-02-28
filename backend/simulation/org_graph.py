@@ -24,18 +24,18 @@ class OrgGraph:
         print("🔨 Building organizational graph from scratch...")
         G = nx.Graph()
         
-        # Step 1 — Add all agents as nodes
+        # Add all agents as nodes
         for agent in agents:
             G.add_node(agent.employee_id, agent=agent)
             
-        # Step 2 — Build lookup map
+        # Build lookup map
         id_to_agent = {a.employee_id: a for a in agents}
         avg_mgr_years = sum(
             getattr(a, 'years_with_curr_manager', 0) for a in agents
         ) / max(len(agents), 1)
         manager_edge_weight = round(min(0.6 + (avg_mgr_years / 10.0) * 0.35, 0.95), 2)
         
-        # Step 3 — Add manager edges (real reporting lines)
+        # Add manager edges (real reporting lines)
         for agent in agents:
             if agent.manager_id and agent.manager_id in id_to_agent:
                 G.add_edge(
@@ -45,7 +45,7 @@ class OrgGraph:
                     edge_type="manager"
                 )
                 
-        # Step 4 — Dynamic peer weights based on actual max level in company
+        # Dynamic peer weights based on actual max level in company
         max_level = max((a.job_level for a in agents), default=5)
         
         def peer_weight(level: int) -> float:
@@ -77,7 +77,7 @@ class OrgGraph:
                         )
                         count += 1
                         
-        # Step 5 — Dynamic skip level edges
+        # Dynamic skip level edges
         def skip_weight(level_low: int, level_high: int) -> float:
             gap = level_high - level_low
             return round(max(0.1, 0.4 - (gap - 1) * 0.1), 2)

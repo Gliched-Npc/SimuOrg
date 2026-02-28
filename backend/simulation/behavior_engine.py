@@ -52,10 +52,10 @@ def update_agent_state(agent: EmployeeAgent,
     if not agent.is_active:
         return
 
-    # Step 1 — Get neighbor influence
+    # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)
 
-    # Step 2 — Update stress
+    # Update stress
     stress_gain = (
         STRESS_GAIN_RATE * workload_multiplier * stress_gain_rate +
         0.01 * neighbor_stress +
@@ -65,20 +65,20 @@ def update_agent_state(agent: EmployeeAgent,
     agent.stress = max(0.0, min(agent.stress + stress_gain, 1.0))
     agent.stress = max(0.0, agent.stress - RECOVERY_RATE)
 
-    # Step 3 — Update fatigue
+    # Update fatigue
     if agent.stress > 0.5:
         agent.fatigue = min(agent.fatigue + 0.03, 1.0)
     else:
         agent.fatigue = max(agent.fatigue - 0.01, 0.0)
 
-    # Step 4 — Update motivation
+    # Update motivation
     if agent.stress > 0.4:
         agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
     else:
         # Recover slowly back to their personal baseline
         agent.motivation = min(agent.motivation + 0.01, agent.baseline_satisfaction / 4.0)
 
-    # Step 5 — Sync satisfaction with motivation and stress, capped at baseline
+    # Sync satisfaction with motivation and stress, capped at baseline
     # Overtime pay provides an artificial monetary buffer to Job Satisfaction
     base_satisfaction = (agent.motivation * 4.0) + overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
@@ -93,10 +93,10 @@ def update_agent_state(agent: EmployeeAgent,
     else:
         agent.work_life_balance = min(target_wlb, agent.work_life_balance + 0.1)
 
-    # Step 6 — Update productivity
+    # Update productivity
     agent.update_productivity(workload_multiplier)
 
-    # Step 7 — Burnout acceleration
+    # Burnout acceleration
     if agent.stress > agent.burnout_limit:
         # agent.stress = min(agent.stress + 0.02, 1.0)
         agent.productivity *= 0.97

@@ -20,14 +20,14 @@ REQUIRED_COLUMNS = [
     "WorkLifeBalance",
     "PerformanceRating",
     "Attrition",
+    "ManagerID",
 ]
 
 # ── Optional — filled with defaults if missing ──
-# IBM HR-specific columns that the new dataset may not have.
+
 OPTIONAL_COLUMNS = {
     # Identity / org structure
-    "ManagerID":               0,
-    "Department":              "General",   # new dataset has no Dept
+    "Department":              "General",   
     "JobRole":                 "Unknown",
     "Gender":                  "Unknown",
     "Age":                     35,
@@ -45,12 +45,12 @@ OPTIONAL_COLUMNS = {
     # Satisfaction 
     "EnvironmentSatisfaction": 3,  
     "JobInvolvement":          3,
+    "BusinessTravel":          "Non-Travel",
 }
 
 # ── High-value optional features — shown in schema report if missing ──
 HIGH_VALUE_COLUMNS = {
     "OverTime": "strong attrition predictor — could improve model AUC by 3-5%",
-    "BusinessTravel": "frequent travelers quit ~2x more — strong signal",
 }
 
 # ── Column name aliases ──
@@ -113,7 +113,7 @@ COLUMN_ALIASES = {
     "Over Time":                  "OverTime",
     "over_time":                  "OverTime",
     "overtime":                   "OverTime",
-    "Overtime":                   "OverTime",          # new dataset uses 'Overtime'
+    "Overtime":                   "OverTime",          
 
     # BusinessTravel
     "Business Travel":            "BusinessTravel",
@@ -122,11 +122,11 @@ COLUMN_ALIASES = {
     "Travel":                     "BusinessTravel",
 
     # ── New dataset specific aliases ──
-    "Number of Promotions":       "NumberOfPromotions",  # → derive YearsSinceLastPromotion
-    "Number of Dependents":       "NumberOfDependents",  # stored but not used in ML
-    "Education Level":            "EducationLevel",      # stored but not used in ML
-    "Company Size":               "CompanySize",         # stored but not used in ML
-    "Remote Work":                "RemoteWork",          # optional ML feature
+    "Number of Promotions":       "NumberOfPromotions",  
+    "Number of Dependents":       "NumberOfDependents",  
+    "Education Level":            "EducationLevel",
+    "Company Size":               "CompanySize",         
+    "Remote Work":                "RemoteWork",          
     "Leadership Opportunities":   "LeadershipOpportunities",
     "Innovation Opportunities":   "InnovationOpportunities",
     "Company Reputation":         "CompanyReputation",
@@ -185,7 +185,7 @@ def normalize_attrition(df: pd.DataFrame) -> pd.DataFrame:
             return "Yes"
         if v in ATTRITION_NO:
             return "No"
-        return "No"  # safe default
+        return "No"  
 
     df["Attrition"] = df["Attrition"].apply(map_val)
     return df
@@ -251,7 +251,6 @@ def build_schema_report(
     missing_optional: list[str],
     found_optional: list[str],
     overtime_was_present: bool = False,
-    travel_was_present: bool = False,
 ) -> dict:
     """
     Step 5 — Build report for CEO showing what was found vs missing.
@@ -259,14 +258,9 @@ def build_schema_report(
     """
     high_value_missing = []
     for col, reason in HIGH_VALUE_COLUMNS.items():
-        # OverTime/BusinessTravel are consumed by encoders — use flags
         if col == "OverTime" and not overtime_was_present:
             high_value_missing.append(
                 f"{col} ({reason}) — defaulted to 0 (no overtime) for all employees"
-            )
-        elif col == "BusinessTravel" and not travel_was_present:
-            high_value_missing.append(
-                f"{col} ({reason}) — defaulted to 0 (non-travel) for all employees"
             )
 
     overtime_active = bool("overtime" in df.columns and df["overtime"].sum() > 0)
@@ -279,7 +273,6 @@ def build_schema_report(
         "overtime_encoded":          overtime_active,
         "overtime_was_in_upload":    overtime_was_present,
         "travel_encoded":            travel_active,
-        "travel_was_in_upload":      travel_was_present,
         "note": (
             "All recommended columns present. Model will use full feature set."
             if not missing_optional and not high_value_missing else
@@ -294,8 +287,7 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
     Step 1b — Derive columns from alternative sources when primary is missing.
     Handles new dataset formats that don't have IBM HR column names.
     """
-    # CompanyTenure → YearsAtCompany (new dataset has both 'Years at Company'
-    # AND 'Company Tenure' as separate cols. Use 'CompanyTenure' as fallback.)
+    # CompanyTenure → YearsAtCompany 
     if "YearsAtCompany" not in df.columns and "CompanyTenure" in df.columns:
         df["YearsAtCompany"] = df["CompanyTenure"]
         print("  ↳ YearsAtCompany: derived from CompanyTenure")
@@ -314,11 +306,11 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
         df["YearsSinceLastPromotion"] = (3 / (promo + 1)).round(0).astype(int)
         print("  ↳ YearsSinceLastPromotion: derived from NumberOfPromotions (inverted)")
 
-    # JobRole — new dataset has 'Job Role' which is already aliased. If still missing, default.
+    # JobRole
     if "JobRole" not in df.columns:
         df["JobRole"] = "Unknown"
 
-    # Department — new dataset doesn't have Dept; default to "General"
+    # Department
     if "Department" not in df.columns:
         df["Department"] = "General"
         print("  ↳ Department: not found — defaulted to 'General'")
@@ -382,18 +374,17 @@ def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str], bool, bool]:
+def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str], bool]:
     """
     Full normalization pipeline — call this in upload_routes.py.
-    Returns (normalized_df, missing_optional, found_optional, overtime_was_present, travel_was_present).
+    Returns (normalized_df, missing_optional, found_optional, overtime_was_present).
     """
     df = normalize_columns(df)
-    df = derive_missing_columns(df)          # handle dataset-specific derivations
+    df = derive_missing_columns(df)         # handle dataset-specific derivations
     df = encode_satisfaction_scores(df)      # convert Low/High/Very High → 1-4 BEFORE cleaning
     overtime_was_present = "OverTime" in df.columns  # capture BEFORE encode drops it
-    travel_was_present   = "BusinessTravel" in df.columns
     df = normalize_attrition(df)
     df = encode_overtime(df)
     df = encode_business_travel(df)
     df, missing_optional, found_optional = apply_optional_defaults(df)
-    return df, missing_optional, found_optional, overtime_was_present, travel_was_present
+    return df, missing_optional, found_optional, overtime_was_present

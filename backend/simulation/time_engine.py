@@ -45,7 +45,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     for month in range(1, config.duration_months + 1):
         print(f"📅 Month {month}...")
 
-        # Step 1 — Update all agent states
+        #   Update all agent states
         for agent in agents:
             if agent.is_active:
                 update_agent_state(
@@ -56,7 +56,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                     overtime_bonus        = config.overtime_bonus,
                 )
 
-        # Step 2 — Layoffs
+        # Layoffs
         layoff_agents = []
         if config.layoff_ratio > 0:
             active     = [a for a in agents if a.is_active]
@@ -65,7 +65,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             for agent in layoff_targets:
                 layoff_agents.append(agent)
 
-        # Step 3 — Voluntary attrition
+        # Voluntary attrition
         quitting_agents = []
         for agent in agents:
             if not agent.is_active or agent in layoff_agents:
@@ -77,14 +77,14 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             if random.random() < monthly_prob * PROB_SCALE:
                 quitting_agents.append(agent)
 
-        # Step 4 — Process departures
+        # Process departures
         for agent in layoff_agents + quitting_agents:
             apply_attrition_shockwave(agent, G, config.shock_factor)
             agent.is_active = False
             if G.has_node(agent.employee_id):
                 G.remove_node(agent.employee_id)
 
-        # Step 5 — Hiring (replaces voluntary quits only)
+        # Hiring (replaces voluntary quits only)
         if config.hiring_active:
             for quitter in quitting_agents:
                 max_id += 1
@@ -134,7 +134,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                         edge_type="manager"
                     )
 
-        # Step 6 — Metrics
+        #  Metrics
         active_agents    = [a for a in agents if a.is_active]
         avg_stress       = np.mean([a.stress            for a in active_agents])
         avg_productivity = np.mean([a.productivity      for a in active_agents])

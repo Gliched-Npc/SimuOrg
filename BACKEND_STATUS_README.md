@@ -135,7 +135,7 @@ This matches real-world HR patterns where attrition is slow initially, then acce
 | Promotion Freeze | 1.1 | 1.0 | 0.02 | 0.2 | ✅ |
 
 ### Why These Are Hardcoded (For Now)
-These values are PoC placeholders. In production, the **LLM + RAG orchestrator** will replace them:
+These values are  placeholders. In production, the **LLM + RAG orchestrator** will replace them:
 
 ```
 User: "Simulate what happens if we push aggressive quarterly KPIs"
@@ -152,12 +152,3 @@ If unrealistic → auto-adjusts and reruns
 The orchestrator (`backend/orchestrator/`) will translate natural language policy descriptions into data-driven simulation parameters, grounded in retrieved HR research.
 
 ---
-
-## 6. Pending Work
-
-| Component | Purpose | Priority |
-|-----------|---------|----------|
-| LLM + RAG Orchestrator | Natural language → policy parameters | High |
-| Authentication | API auth middleware | Medium |
-| Centralized Config | `config.py` for environment settings | Medium |
-| Frontend (React/Vite) | Dashboard for simulation results | After backend complete |
