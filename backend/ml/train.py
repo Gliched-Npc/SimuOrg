@@ -9,7 +9,7 @@ from backend.ml.calibration import calibrate
 
 def train_all():
     print("=" * 50)
-    print("🚀 SimuOrg ML Training Pipeline")
+    print("=== SimuOrg ML Training Pipeline")
     print("=" * 50)
 
     print("\n[1/3] Training attrition model...")
@@ -22,7 +22,7 @@ def train_all():
     calibrate()
 
     print("\n" + "=" * 50)
-    print("✅ All models trained and calibration complete.")
+    print("+++ All models trained and calibration complete.")
     print("   Ready to run simulations.")
     print("=" * 50)
 

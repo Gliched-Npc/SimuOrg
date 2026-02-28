@@ -27,7 +27,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
         result      = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name)
         all_logs.append(result["logs"])
 
-    print(f"\n✅ Monte Carlo complete.")
+    print(f"\n+++ Monte Carlo complete.")
 
     # Aggregate across runs for each month
     duration   = len(all_logs[0])
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     config  = get_policy("baseline")
     results = run_monte_carlo(config, runs=10)
 
-    print("\n📊 Month 12 Summary (across 10 runs):")
+    print("\n=== Month 12 Summary (across 10 runs):")
     m12 = results["results"][11]
     for key, val in m12.items():
         if key != "month":

@@ -110,7 +110,7 @@ class OrgGraph:
                             )
                             skip_count += 1
                             
-        print(f"✅ Graph built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+        print(f"+++ Graph built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
         return G
 
     # --- NETWORKX EXPOSED METHODS ___

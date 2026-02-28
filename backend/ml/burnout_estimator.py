@@ -32,7 +32,7 @@ def load_data_from_db():
 
 
 def train_burnout_estimator():
-    print("📊 Loading data from database...")
+    print("=== Loading data from database...")
     df = load_data_from_db()
 
     print("\n🔍 Sample Thresholds:")
@@ -44,7 +44,7 @@ def train_burnout_estimator():
 
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(burnout_threshold, "backend/ml/exports/burnout_threshold.pkl")
-    print("\n✅ Saved to backend/ml/exports/burnout_threshold.pkl")
+    print("\n+++ Saved to backend/ml/exports/burnout_threshold.pkl")
 
 
 if __name__ == "__main__":

@@ -79,7 +79,9 @@ The XGBoost classifier uses **21 features** (16 raw + 5 engineered):
 | Time Engine (`time_engine.py`) | ✅ | Full simulation loop with summary |
 | Monte Carlo (`monte_carlo.py`) | ✅ | Multi-run aggregation |
 | Policies (`policies.py`) | ✅ | 6 policies with tuned values |
-| API Routes | ✅ | `/run`, `/compare`, `/upload` |
+| API Routes (`sim_routes.py`, `upload_routes.py`) | ✅ | `/api/sim/run`, `/api/sim/compare`, `/api/upload/dataset` |
+| Explainable AI (`explain.py`) | ✅ | SHAP values for employee attrition |
+| ML API Routes (`ml_routes.py`) | ✅ | `/api/ml/explain/{employee_id}` |
 | Orchestrator (LLM) | 🔲 | Placeholder — pending |
 | Auth | 🔲 | Placeholder — pending |
 

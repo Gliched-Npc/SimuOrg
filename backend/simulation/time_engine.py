@@ -33,7 +33,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     if config is None:
         config = SimulationConfig()
 
-    print(f"🚀 Starting simulation — Policy: {policy_name.upper()}")
+    print(f"=== Starting simulation - Policy: {policy_name.upper()}")
     if agents is None:
         agents = load_agents_from_db()
     if G is None:
@@ -176,7 +176,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     attrition_rate    = total_quits / initial_headcount * 100
 
     print(f"\n{'='*50}")
-    print(f"📊 Simulation Summary — {policy_name.upper()}")
+    print(f"=== Simulation Summary - {policy_name.upper()}")
     print(f"{'='*50}")
     print(f"   Duration          : {config.duration_months} months")
     print(f"   Initial Headcount : {initial_headcount}")
@@ -188,7 +188,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     print(f"   Final Productivity: {logs[-1]['avg_productivity']:.3f}")
     print(f"   Final Burnout     : {logs[-1]['burnout_count']}")
     print(f"{'='*50}")
-    print("✅ Simulation complete.")
+    print("+++ Simulation complete.")
 
     return {"config": config.__dict__, "logs": logs}
 

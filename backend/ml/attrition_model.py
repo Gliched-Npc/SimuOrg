@@ -137,7 +137,7 @@ def tune_threshold(model, X_val, y_val) -> float:
 def train_attrition_model():
     global FEATURES
 
-    print("📊 Loading data from database...")
+    print("=== Loading data from database...")
     df = load_data_from_db()
     df = df.drop(columns=['employee_id', 'simulation_id'], errors='ignore')
     df = df.drop_duplicates()
@@ -235,14 +235,14 @@ def train_attrition_model():
     test_accuracy  = accuracy_score(y_test, y_pred_test)
     auc            = roc_auc_score(y_test, test_probs)
 
-    print("\n📈 Test Performance (held-out, never seen during training or tuning):")
+    print("\n=== Test Performance (held-out, never seen during training or tuning):")
     print(classification_report(y_test, y_pred_test, target_names=["Stays", "Quits"]))
-    print(f"📈 AUC-ROC: {auc:.4f}")
+    print(f"=== AUC-ROC: {auc:.4f}")
 
     print(f"\n🔍 Training Performance (pre-{strategy} train set):")
     print(classification_report(y_train, y_pred_train, target_names=["Stays", "Quits"]))
 
-    print(f"\n📊 Accuracy Summary:")
+    print(f"\n=== Accuracy Summary:")
     print(f"  Training Accuracy : {train_accuracy*100:.2f}%")
     print(f"  Test Accuracy     : {test_accuracy*100:.2f}%")
     print(f"  Overfitting Gap   : {(train_accuracy - test_accuracy)*100:.2f}%")
@@ -269,9 +269,9 @@ def train_attrition_model():
     print(f"  Mean AUC:     {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 
     if cv_scores.mean() < 0.65:
-        print("  ⚠️  WARNING: Low AUC — features may lack predictive signal for this dataset.")
+        print("  ---  WARNING: Low AUC - features may lack predictive signal for this dataset.")
     if cv_scores.std() > 0.05:
-        print("  ⚠️  WARNING: High variance across folds — model reliability is unstable.")
+        print("  ---  WARNING: High variance across folds - model reliability is unstable.")
 
     cv_mean = float(cv_scores.mean())
     quality_report = {
@@ -304,7 +304,7 @@ def train_attrition_model():
         {"model": model, "threshold": best_threshold, "features": FEATURES},
         "backend/ml/exports/quit_probability.pkl"
     )
-    print("✅ Model saved to backend/ml/exports/quit_probability.pkl")
+    print("+++ Model saved to backend/ml/exports/quit_probability.pkl")
     return quality_report
 
 

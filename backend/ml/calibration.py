@@ -111,7 +111,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     with open(save_path, "w") as f:
         json.dump(calibration, f, indent=2)
 
-    print("✅ Calibration complete:")
+    print("+++ Calibration complete:")
     for k, v in calibration.items():
         print(f"   {k}: {v}")
 

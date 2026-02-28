@@ -121,7 +121,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     # NOTE: OverTime is already encoded to `overtime` by schema.normalize_dataframe()
     # before clean_dataframe() is called — no re-encoding needed here.
 
-    print(f"✅ Cleaning done. {len(df)} rows ready.")
+    print(f"+++ Cleaning done. {len(df)} rows ready.")
     return df, duplicates_removed
 
 
@@ -210,7 +210,7 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
             )
             employees.append(emp)
         except Exception as e:
-            print(f"⚠️ Skipping bad row: {e}")
+            print(f"--- Skipping bad row: {e}")
             skipped += 1
             continue
 
@@ -220,19 +220,19 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
         session.add_all(employees)
         session.commit()
 
-    print(f"✅ SUCCESS! {len(employees)} employees ingested. Skipped: {skipped}")
+    print(f"+++ SUCCESS! {len(employees)} employees ingested. Skipped: {skipped}")
     return {"ingested": len(employees), "skipped": skipped}
 
 
 def ingest_data():
-    print("🚀 Starting Ingestion...")
+    print("=== Starting Ingestion...")
     init_db()
-    print("✅ Database Connection: OK")
+    print("+++ Database Connection: OK")
 
     try:
         df = pd.read_csv("backend/data/SimuOrg_Master_Dataset.csv")
     except FileNotFoundError:
-        print("❌ Error: File not found in backend/data/")
+        print("--- Error: File not found in backend/data/")
         return
 
     print(f"📄 Found {len(df)} rows. Normalizing...")
