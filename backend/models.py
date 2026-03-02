@@ -39,7 +39,7 @@ class Employee(SQLModel, table=True):
     years_with_curr_manager: Optional[int] = Field(default=0)
     stock_option_level:int = Field(default=0)
     overtime: Optional[int] = Field(default=0)
-    business_travel: Optional[int] = Field(default=0)
     
+
     class Config:
         populate_by_name = True

@@ -84,16 +84,36 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     avg_job_satisfaction  = np.mean([emp.job_satisfaction for emp in employees])
     avg_work_life_balance = np.mean([emp.work_life_balance for emp in employees])
 
-    stress_gain_rate = round(0.02 * (1 - (avg_job_satisfaction / 4.0) * 0.5), 4)
-    recovery_rate    = round(0.015 * (avg_work_life_balance / 4.0), 4)
+    # ── Data-driven stress physics ──
+    # stress_gain and recovery derived from stress_amplification + observed natural quit rate.
+    # The base multiplier is no longer hardcoded (0.02/0.015) — it is anchored to:
+    #   monthly_natural_rate: observed monthly attrition speed
+    #   avg_burnout_limit:    how much stress employees can absorb
+    # Ratio of gain:recovery ← sqrt(stress_amplification) (geometric mean between max/min)
+    gain_to_recovery_ratio = stress_amplification ** 0.5
+    # Natural drift = how fast accumulated stress should grow for "average" employee
+    #   anchored to monthly_natural_rate × burnout_limit (so drift ∝ real attrition)
+    natural_drift = monthly_natural_rate * float(np.mean(burnout_limits))
+    # With formula: gain - recovery = natural_drift, and gain/recovery = ratio:
+    base_recovery  = natural_drift / (gain_to_recovery_ratio - 1)
+    base_gain      = base_recovery * gain_to_recovery_ratio
+    # Scale by actual satisfaction/WLB (same formula structure as before, but base is data-driven)
+    stress_gain_rate = round(base_gain     * (1 - (avg_job_satisfaction / 4.0) * 0.5), 4)
+    recovery_rate    = round(base_recovery * (avg_work_life_balance / 4.0), 4)
 
     avg_loyalty              = np.mean([min(emp.years_at_company / 10.0, 1.0) for emp in employees])
     shockwave_stress_factor  = round(0.3 * (1 - avg_loyalty * 0.3), 4)
     shockwave_loyalty_factor = round(0.1 * (1 - avg_loyalty * 0.2), 4)
 
+    # ── Data-driven stress threshold ──
+    # Instead of always using the 30th percentile of burnout_limits:
+    # Use the actual attrition rate as the percentile → the stress threshold
+    # corresponds to the burnout tolerance of employees in the "attrition risk zone"
+    attrition_percentile = annual_attrition_rate * 100  # e.g., 16.1
+
     calibration = {
         "quit_threshold":        tuned_threshold,
-        "stress_threshold":      round(float(np.percentile(burnout_limits, 30)), 4),
+        "stress_threshold":      round(float(np.percentile(burnout_limits, attrition_percentile)), 4),
         "avg_quit_prob":         round(float(np.mean(quit_probs)), 4),
         "avg_burnout_limit":     round(float(np.mean(burnout_limits)), 4),
         "annual_attrition_rate": round(annual_attrition_rate, 4),
@@ -106,6 +126,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
         "prob_scale":            prob_scale,
         "stress_amplification":  stress_amplification,
     }
+
 
     os.makedirs("backend/ml/exports", exist_ok=True)
     with open(save_path, "w") as f:

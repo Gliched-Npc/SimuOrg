@@ -30,7 +30,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
     # --- Age ---
     df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-    df['Age'] = df['Age'].round(0).fillna(35).astype(int)
+    df['Age'] = df['Age'].round(0).fillna(df['Age'].median()).astype(int)  # data-driven, not hardcoded 35
     df['Age'] = df['Age'].clip(lower=18, upper=80)
 
     # --- JobLevel ---
@@ -50,12 +50,14 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
     # --- PerformanceRating ---
     df['PerformanceRating'] = pd.to_numeric(df['PerformanceRating'], errors='coerce')
-    df['PerformanceRating'] = df['PerformanceRating'].round(0).fillna(3).astype(int)
+    _perf_mode = int(df['PerformanceRating'].dropna().mode().iloc[0]) if df['PerformanceRating'].notna().any() else 2
+    df['PerformanceRating'] = df['PerformanceRating'].round(0).fillna(_perf_mode).astype(int)  # data-driven mode
     df['PerformanceRating'] = df['PerformanceRating'].clip(lower=1, upper=4)
 
     # --- JobInvolvement ---
     df['JobInvolvement'] = pd.to_numeric(df['JobInvolvement'], errors='coerce')
-    df['JobInvolvement'] = df['JobInvolvement'].round(0).fillna(2).astype(int)
+    _inv_mode = int(df['JobInvolvement'].dropna().mode().iloc[0]) if df['JobInvolvement'].notna().any() else 2
+    df['JobInvolvement'] = df['JobInvolvement'].round(0).fillna(_inv_mode).astype(int)  # data-driven mode
     df['JobInvolvement'] = df['JobInvolvement'].clip(lower=1, upper=4)
 
     # --- YearsSinceLastPromotion ---
@@ -105,15 +107,15 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     for col in ['JobSatisfaction', 'WorkLifeBalance', 'EnvironmentSatisfaction']:
         df[col] = df[col].clip(lower=1.0, upper=4.0)
 
-    df['NumCompaniesWorked'] = df['NumCompaniesWorked'].clip(lower=0)
     df['TotalWorkingYears']  = df['TotalWorkingYears'].clip(lower=0)
+    df['NumCompaniesWorked'] = df['NumCompaniesWorked'].clip(lower=0)
 
-    # --- Normalize string columns ---
-    df['Attrition']     = df['Attrition'].fillna('No')
-    df['Gender']        = df['Gender'].fillna('Unknown').str.strip().str.capitalize()
-    df['JobRole']       = df['JobRole'].fillna('Unknown').str.strip().str.title()
-    df['Department']    = df['Department'].fillna('Unknown').str.strip().str.title()
-    df['MaritalStatus'] = df['MaritalStatus'].fillna('Unknown').str.strip().str.capitalize()
+    # --- Normalize string columns if present ---
+    df['Attrition'] = df['Attrition'].fillna('No')
+    if 'Gender' in df.columns: df['Gender'] = df['Gender'].fillna('Unknown').str.strip().str.capitalize()
+    if 'JobRole' in df.columns: df['JobRole'] = df['JobRole'].fillna('Unknown').str.strip().str.title()
+    if 'Department' in df.columns: df['Department'] = df['Department'].fillna('Unknown').str.strip().str.title()
+    if 'MaritalStatus' in df.columns: df['MaritalStatus'] = df['MaritalStatus'].fillna('Unknown').str.strip().str.capitalize()
 
     # NOTE: OverTime is already encoded to `overtime` by schema.normalize_dataframe()
     # before clean_dataframe() is called — no re-encoding needed here.
@@ -203,7 +205,6 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 percent_salary_hike        = int(row.get('PercentSalaryHike', 0)),
                 years_in_current_role      = int(row.get('YearsInCurrentRole', 0)),
                 overtime                   = int(row.get('overtime', 0)),
-                business_travel            = int(row.get('business_travel', 0)),
             )
             employees.append(emp)
         except Exception as e:

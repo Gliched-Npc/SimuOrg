@@ -9,49 +9,25 @@
 import pandas as pd
 
 # ── Hard required — upload fails without these ──
-# Kept minimal: only columns that BOTH the IBM HR dataset and
-# generic HR CSVs (e.g. Kaggle train.csv) are likely to have.
+# Reduced to exactly 14 strictly required columns based on feature importance.
 REQUIRED_COLUMNS = [
     "EmployeeID",
-    "JobLevel",
-    "MonthlyIncome",
-    "YearsAtCompany",
+    "ManagerID",
+    "Department",
+    "JobRole",
+    "Age",
     "JobSatisfaction",
     "WorkLifeBalance",
-    "PerformanceRating",
+    "EnvironmentSatisfaction",
+    "YearsAtCompany",
+    "TotalWorkingYears",
+    "NumCompaniesWorked",
+    "YearsWithCurrManager",
+    "YearsSinceLastPromotion",
+    "JobLevel",
+    "MonthlyIncome",
     "Attrition",
-    "ManagerID",
 ]
-
-# ── Optional — filled with defaults if missing ──
-
-OPTIONAL_COLUMNS = {
-    # Identity / org structure
-    "Department":              "General",   
-    "JobRole":                 "Unknown",
-    "Gender":                  "Unknown",
-    "Age":                     35,
-    "MaritalStatus":           "Unknown",
-    # Financial
-    "DistanceFromHome":        0,
-    "PercentSalaryHike":       0,
-    "StockOptionLevel":        0,
-    # Experience 
-    "TotalWorkingYears":       0,  
-    "NumCompaniesWorked":      1,
-    "YearsSinceLastPromotion": 0,
-    "YearsWithCurrManager":    0,
-    "YearsInCurrentRole":      0,
-    # Satisfaction 
-    "EnvironmentSatisfaction": 3,  
-    "JobInvolvement":          3,
-    "BusinessTravel":          "Non-Travel",
-}
-
-# ── High-value optional features — shown in schema report if missing ──
-HIGH_VALUE_COLUMNS = {
-    "OverTime": "strong attrition predictor — could improve model AUC by 3-5%",
-}
 
 # ── Column name aliases ──
 # Maps any known variation → our canonical schema name.
@@ -115,11 +91,6 @@ COLUMN_ALIASES = {
     "overtime":                   "OverTime",
     "Overtime":                   "OverTime",          
 
-    # BusinessTravel
-    "Business Travel":            "BusinessTravel",
-    "Business_Travel":            "BusinessTravel",
-    "business_travel":            "BusinessTravel",
-    "Travel":                     "BusinessTravel",
 
     # ── New dataset specific aliases ──
     "Number of Promotions":       "NumberOfPromotions",  
@@ -153,7 +124,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns=COLUMN_ALIASES)
 
     # Fuzzy match — strip spaces, underscores, hyphens + lowercase
-    our_cols = set(REQUIRED_COLUMNS) | set(OPTIONAL_COLUMNS.keys()) | set(HIGH_VALUE_COLUMNS.keys())
+    # Now we only target REQUIRED_COLUMNS, plus keeping any extra columns safe for aliasing.
+    our_cols = set(REQUIRED_COLUMNS)
     df_col_normalized = {
         c.lower().replace(" ", "").replace("_", "").replace("-", ""): c
         for c in df.columns
@@ -206,78 +178,27 @@ def encode_overtime(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def encode_business_travel(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Step 3b — Encode BusinessTravel to ordinal integer.
-    Non-Travel=0, Travel_Rarely=1, Travel_Frequently=2.
-    Defaults to 0 if column is missing.
-    """
-    travel_map = {
-        "non-travel": 0, "non_travel": 0, "no": 0, "none": 0,
-        "travel_rarely": 1, "rarely": 1, "low": 1,
-        "travel_frequently": 2, "frequently": 2, "high": 2, "yes": 2,
-    }
-    if "BusinessTravel" in df.columns:
-        df["business_travel"] = df["BusinessTravel"].apply(
-            lambda x: travel_map.get(str(x).strip().lower().replace(" ", "_"), 0)
-        )
-        print("  ↳ BusinessTravel encoded → business_travel (0=No, 1=Rarely, 2=Frequently)")
-    else:
-        df["business_travel"] = 0
-    return df
-
-
-def apply_optional_defaults(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
-    """
-    Step 4 — Fill missing optional columns with defaults.
-    Returns (df, missing_optional, found_optional).
-    """
-    missing = []
-    found   = []
-
-    for col, default in OPTIONAL_COLUMNS.items():
-        if col not in df.columns:
-            df[col] = default
-            missing.append(col)
-            print(f"  ↳ {col}: not found — using default ({default})")
-        else:
-            found.append(col)
-
-    return df, missing, found
-
 
 def build_schema_report(
     df: pd.DataFrame,
-    missing_optional: list[str],
-    found_optional: list[str],
     overtime_was_present: bool = False,
 ) -> dict:
     """
-    Step 5 — Build report for CEO showing what was found vs missing.
-    overtime_was_present: True if OverTime column existed in the original upload.
+    Step 5 — Build report for CEO showing what was found.
+    Since all core columns are strictly mandatory now, we just report
+    whether the bonus features (overtime, travel) were found.
     """
-    high_value_missing = []
-    for col, reason in HIGH_VALUE_COLUMNS.items():
-        if col == "OverTime" and not overtime_was_present:
-            high_value_missing.append(
-                f"{col} ({reason}) — defaulted to 0 (no overtime) for all employees"
-            )
-
     overtime_active = bool("overtime" in df.columns and df["overtime"].sum() > 0)
-    travel_active   = bool("business_travel" in df.columns and df["business_travel"].sum() > 0)
+
+    bonus_features = []
+    if overtime_active: bonus_features.append("OverTime")
 
     return {
-        "optional_features_found":   found_optional,
-        "optional_features_missing": missing_optional,
-        "high_value_missing":        high_value_missing,
+        "bonus_features_found":      bonus_features,
         "overtime_encoded":          overtime_active,
         "overtime_was_in_upload":    overtime_was_present,
-        "travel_encoded":            travel_active,
         "note": (
-            "All recommended columns present. Model will use full feature set."
-            if not missing_optional and not high_value_missing else
-            f"{len(missing_optional)} optional column(s) missing — filled with defaults. "
-            f"Providing these would improve simulation accuracy."
+            "All mandatory columns present. Model will run successfully."
         ),
     }
 
@@ -306,21 +227,12 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
         df["YearsSinceLastPromotion"] = (3 / (promo + 1)).round(0).astype(int)
         print("  ↳ YearsSinceLastPromotion: derived from NumberOfPromotions (inverted)")
 
-    # JobRole
-    if "JobRole" not in df.columns:
-        df["JobRole"] = "Unknown"
-
-    # Department
-    if "Department" not in df.columns:
-        df["Department"] = "General"
-        print("  ↳ Department: not found — defaulted to 'General'")
-
     return df
 
 
 def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Step 1c — Encode string satisfaction/rating columns to numeric 1-4 scale.
+    Encode string satisfaction/rating columns to numeric 1-4 scale.
     Handles datasets that use 'Low/Medium/High/Very High' instead of integers.
     IBM HR datasets use integers already — those pass through unchanged.
     Detection uses pd.to_numeric (robust) rather than dtype check.
@@ -374,10 +286,10 @@ def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str], bool]:
+def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     """
     Full normalization pipeline — call this in upload_routes.py.
-    Returns (normalized_df, missing_optional, found_optional, overtime_was_present).
+    Returns (normalized_df, overtime_was_present).
     """
     df = normalize_columns(df)
     df = derive_missing_columns(df)         # handle dataset-specific derivations
@@ -385,6 +297,4 @@ def normalize_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list
     overtime_was_present = "OverTime" in df.columns  # capture BEFORE encode drops it
     df = normalize_attrition(df)
     df = encode_overtime(df)
-    df = encode_business_travel(df)
-    df, missing_optional, found_optional = apply_optional_defaults(df)
-    return df, missing_optional, found_optional, overtime_was_present
+    return df, overtime_was_present

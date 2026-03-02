@@ -13,12 +13,12 @@ from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 from backend.database import engine
 from backend.models import Employee
 
-# ── Base features — always present ──
+# ── Features ──
+# Driven strictly by the 14-column mandatory schema + engineered features.
 BASE_FEATURES = [
     "job_satisfaction",
     "work_life_balance",
     "environment_satisfaction",
-    "job_involvement",
     "monthly_income",
     "years_at_company",
     "total_working_years",
@@ -26,29 +26,17 @@ BASE_FEATURES = [
     "job_level",
     "years_since_last_promotion",
     "years_with_curr_manager",
-    "performance_rating",
-    "stock_option_level",
     "age",
-    "distance_from_home",
-    "percent_salary_hike",
-    "years_in_current_role",
     # Engineered
     "stagnation_score",
     "satisfaction_composite",
     "career_velocity",
     "loyalty_index",
-    "is_single",
 ]
 
-# ── Optional features — used only if present and non-zero variance ──
+# Bonus features (used if the user uploads them, despite being optional now)
 OPTIONAL_FEATURES = [
-    "overtime",                   # strong predictor — IBM research shows 30%+ attrition for overtime workers
-    "business_travel",            # frequent travelers quit ~2x more
-    # New dataset columns — used if present and have signal
-    "leadership_opportunities",   # encoded 0/1 — lack of growth = attrition signal
-    "innovation_opportunities",   # encoded 0/1
-    "company_reputation",         # encoded 0/1
-    "employee_recognition",       # encoded 0/1
+    "overtime",
 ]
 
 TARGET = "attrition"
@@ -73,46 +61,23 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
     df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 
-    # Marital status — single employees quit more
-    if 'marital_status' in df.columns:
-        df['is_single'] = (df['marital_status'].str.lower() == 'single').astype(int)
-    else:
-        df['is_single'] = 0
+    # Marital status was removed from the mandatory schema due to low feature importance,
+    # so we no longer calculate is_single.
 
     return df
 
 
 def get_active_features(df: pd.DataFrame) -> list[str]:
     """
-    Determine which features to use based on what's actually in the data.
-    - BASE_FEATURES with zero variance (e.g. all-default columns) are dropped.
-    - OPTIONAL_FEATURES are added only if present and have real signal.
+    Determine which features to use.
+    BASE_FEATURES are guaranteed by schema.py.
     """
-    features = []
-
-    # Filter base features — drop any that are flat (zero variance)
-    dropped_base = []
-    for feat in BASE_FEATURES:
-        if feat not in df.columns:
-            continue
-        if df[feat].std() > 0:
-            features.append(feat)
-        else:
-            dropped_base.append(feat)
-
-    if dropped_base:
-        print(f"  ↳ Dropped {len(dropped_base)} zero-variance base features: {dropped_base}")
+    features = BASE_FEATURES.copy()
 
     for opt in OPTIONAL_FEATURES:
-        if opt in df.columns:
-            # Only use if it has real variance — not all zeros (default fill)
-            if df[opt].std() > 0:
-                features.append(opt)
-                print(f"  ↳ Optional feature '{opt}' found with signal — added to model")
-            else:
-                print(f"  ↳ Optional feature '{opt}' found but all zeros — skipped")
-        else:
-            print(f"  ↳ Optional feature '{opt}' not in dataset — skipped")
+        if opt in df.columns and df[opt].std() > 0:
+            features.append(opt)
+            print(f"  ↳ Bonus feature '{opt}' found with signal — added to model")
 
     return features
 
@@ -193,7 +158,7 @@ def train_attrition_model():
     quick_cv = cross_val_score(quick_model, X_train, y_train, cv=3, scoring='roc_auc')
     signal_strength = quick_cv.mean()
 
-    if signal_strength >= 0.70:
+    if signal_strength >= 0.60:
         sm = SMOTE(random_state=42)
         X_train_final, y_train_final = sm.fit_resample(X_train, y_train)
         strategy = "SMOTE"
@@ -211,13 +176,13 @@ def train_attrition_model():
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        min_child_weight=10,
+        min_child_weight=5,       # lowered from 10 → allows finer splits on minority class
         reg_alpha=1.0,
         reg_lambda=2.0,
         scale_pos_weight=1 if strategy == "SMOTE" else imbalance_ratio,
         random_state=42,
         eval_metric="logloss",
-        early_stopping_rounds=20,
+        early_stopping_rounds=30,      # increased from 20 — more patience on small datasets
         verbosity=0,
     )
     model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
@@ -256,7 +221,7 @@ def train_attrition_model():
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        min_child_weight=10,
+        min_child_weight=5,       # kept in sync with main model
         reg_alpha=1.0,
         reg_lambda=2.0,
         random_state=42,
@@ -281,7 +246,7 @@ def train_attrition_model():
         "test_accuracy":       round(float(test_accuracy), 4),
         "train_accuracy":      round(float(train_accuracy), 4),
         "features_used":       len(FEATURES),
-        "optional_features":   [f for f in OPTIONAL_FEATURES if f in FEATURES],
+        "bonus_features":      [f for f in OPTIONAL_FEATURES if f in FEATURES],
         "signal_strength":     (
             "strong"   if cv_mean >= 0.80 else
             "moderate" if cv_mean >= 0.65 else

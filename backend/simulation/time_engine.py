@@ -10,6 +10,7 @@ from backend.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
 from backend.simulation.org_graph import build_org_graph, OrgGraph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
+from backend.ml.burnout_estimator import burnout_threshold as burnout_fn  # for new hire burnout_limit
 
 # Load calibration with fallback defaults
 try:
@@ -111,7 +112,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                 new_agent.loyalty                    = 0.1
                 new_agent.productivity               = 1.0
                 new_agent.is_active                  = True
-                new_agent.burnout_limit              = 0.4
+                new_agent.burnout_limit              = burnout_fn(quitter.job_level, 0)  # level-aware, not hardcoded 0.4
                 new_agent.years_since_last_promotion = 0
                 new_agent.years_with_curr_manager    = 0
                 new_agent.stock_option_level         = 0
