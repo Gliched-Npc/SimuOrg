@@ -25,9 +25,10 @@ def _get_quit_model():
             )
         _saved = joblib.load(_QUIT_MODEL_PATH)
         _quit_model_cache = {
-            "model":     _saved["model"],
-            "threshold": _saved["threshold"],
-            "features":  _saved["features"],
+            "model":          _saved["model"],
+            "threshold":      _saved["threshold"],
+            "features":       _saved["features"],
+            "label_encoders": _saved.get("label_encoders", {}),  # backwards-compatible
         }
     return _quit_model_cache
 
@@ -36,6 +37,8 @@ def _get_quit_model():
 def _quit_model():     return _get_quit_model()["model"]
 def _quit_threshold(): return _get_quit_model()["threshold"]
 def _quit_features():  return _get_quit_model()["features"]
+def _quit_encoders():  return _get_quit_model()["label_encoders"]
+
 
 
 class EmployeeAgent:
@@ -111,9 +114,12 @@ class EmployeeAgent:
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
             "business_travel":            self.business_travel,
+            # Categorical — needed so engineer_features can create *_encoded columns
+            "department":                 self.department,
+            "job_role":                   self.job_role,
         }
         df = pd.DataFrame([raw])
-        df = engineer_features(df)
+        df = engineer_features(df, encoders=_quit_encoders())
         return df[_quit_features()]
 
 

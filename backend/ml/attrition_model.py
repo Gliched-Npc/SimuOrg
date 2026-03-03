@@ -6,9 +6,9 @@ import joblib
 import os
 from sqlmodel import Session, select
 from xgboost import XGBClassifier
-from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, f1_score
+from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, f1_score, precision_score, recall_score
+from sklearn.preprocessing import LabelEncoder
 
 from backend.database import engine
 from backend.models import Employee
@@ -27,22 +27,31 @@ BASE_FEATURES = [
     "years_since_last_promotion",
     "years_with_curr_manager",
     "age",
-    # Engineered
+    # Engineered from mandatory columns — always available
     "stagnation_score",
     "satisfaction_composite",
     "career_velocity",
     "loyalty_index",
+    "income_vs_level",    # monthly_income / job_level — flags underpaid employees
+    "tenure_stability",   # years_with_curr_manager / years_at_company — manager instability
 ]
 
-# Bonus features (used if the user uploads them, despite being optional now)
+# Bonus features — used only if the uploaded dataset contains them
+# Categorical ones are label-encoded in engineer_features before use
 OPTIONAL_FEATURES = [
     "overtime",
+    "department_encoded",
+    "job_role_encoded",
 ]
 
 TARGET = "attrition"
 
 # Global — set after training so agent.py and calibration.py use same features
 FEATURES = BASE_FEATURES.copy()
+
+# Fitted LabelEncoders saved after training — keyed by encoded column name
+# Used at inference time to guarantee identical integer codes as training
+LABEL_ENCODERS: dict = {}
 
 
 def load_data_from_db():
@@ -52,8 +61,10 @@ def load_data_from_db():
     return df
 
 
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Create stronger signals from existing columns."""
+def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
+    """Create stronger signals from existing columns.
+    encoders: pre-fitted LabelEncoders for inference (None = fit at training time).
+    """
     df['stagnation_score']       = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
     df['satisfaction_composite'] = (
         df['job_satisfaction'] + df['work_life_balance'] + df['environment_satisfaction']
@@ -61,8 +72,29 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
     df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 
-    # Marital status was removed from the mandatory schema due to low feature importance,
-    # so we no longer calculate is_single.
+    # Engineered: flag underpaid employees (lower income relative to job level)
+    df['income_vs_level']  = df['monthly_income'] / (df['job_level'] * 1000 + 1)
+    # Engineered: manager tenure relative to company tenure (instability indicator)
+    df['tenure_stability'] = df['years_with_curr_manager'] / (df['years_at_company'] + 1)
+
+    # Label-encode categorical optional features.
+    # Training (encoders=None): fit + register in LABEL_ENCODERS global.
+    # Inference (encoders provided): apply saved mapping so codes are consistent.
+    cat_cols = [
+        ("department", "department_encoded"),
+        ("job_role",   "job_role_encoded"),
+    ]
+    for col, enc_col in cat_cols:
+        if col not in df.columns or df[col].isna().all():
+            continue
+        if encoders and enc_col in encoders:
+            le = encoders[enc_col]
+            mapping = {cls: i for i, cls in enumerate(le.classes_)}
+            df[enc_col] = df[col].fillna("Unknown").astype(str).map(mapping).fillna(-1).astype(int)
+        else:
+            le = LabelEncoder()
+            df[enc_col] = le.fit_transform(df[col].fillna("Unknown").astype(str))
+            LABEL_ENCODERS[enc_col] = le
 
     return df
 
@@ -83,19 +115,46 @@ def get_active_features(df: pd.DataFrame) -> list[str]:
 
 
 
-def tune_threshold(model, X_val, y_val) -> float:
-    probs = model.predict_proba(X_val)[:, 1]
-    best_threshold = 0.5
-    best_f1 = 0
+# Minimum precision floor for the recall-optimised threshold tuner.
+# At 0.30: for every 10 flagged employees, at least 3 are real quitters.
+MIN_PRECISION_FLOOR = 0.30
 
-    for t in np.arange(0.25, 0.70, 0.01):
+
+def tune_threshold(model, X_val, y_val) -> float:
+    """
+    CEO-optimised: maximise Quits recall while precision >= MIN_PRECISION_FLOOR.
+    Falls back to best-F1 threshold if the precision floor can never be satisfied.
+    """
+    probs = model.predict_proba(X_val)[:, 1]
+    best_threshold     = 0.5
+    best_recall        = 0.0
+    fallback_threshold = 0.5
+    fallback_f1        = 0.0
+
+    for t in np.arange(0.10, 0.75, 0.01):
         preds = (probs > t).astype(int)
-        f1 = f1_score(y_val, preds, zero_division=0)
-        if f1 > best_f1:
-            best_f1 = f1
+        if preds.sum() == 0:
+            continue
+        prec = precision_score(y_val, preds, zero_division=0)
+        rec  = recall_score(y_val, preds, zero_division=0)
+        f1   = f1_score(y_val, preds, zero_division=0)
+
+        if f1 > fallback_f1:
+            fallback_f1        = f1
+            fallback_threshold = round(t, 2)
+
+        if prec >= MIN_PRECISION_FLOOR and rec > best_recall:
+            best_recall    = rec
             best_threshold = round(t, 2)
 
-    print(f"  ↳ Optimal threshold: {best_threshold} (F1: {best_f1:.3f})")
+    if best_recall == 0.0:
+        best_threshold = fallback_threshold
+        print(f"  -> Precision floor not met - using best-F1 threshold: {best_threshold} (F1: {fallback_f1:.3f})")
+    else:
+        val_preds = (probs > best_threshold).astype(int)
+        val_prec  = precision_score(y_val, val_preds, zero_division=0)
+        print(f"  -> Recall-optimised threshold: {best_threshold} (Recall: {best_recall:.3f}, Precision: {val_prec:.3f})")
+
     return best_threshold
 
 
@@ -127,6 +186,14 @@ def train_attrition_model():
     X = df[FEATURES]
     y = df[TARGET]
 
+    # Basic sanity check: need both classes for a meaningful classifier.
+    class_counts = y.value_counts()
+    if len(class_counts) < 2:
+        raise ValueError(
+            f"Training data contains only a single attrition class: {class_counts.to_dict()}. "
+            "At least some 'Yes' and 'No' rows are required to train the quit probability model."
+        )
+
     if n_samples < 500:
         max_depth = 3
     elif n_samples < 2000:
@@ -145,29 +212,41 @@ def train_attrition_model():
     )
     print(f"  ↳ Split: Train={len(X_train)} | Val={len(X_val)} | Test={len(X_test)}")
 
-    negative = (y_train == 0).sum()
-    positive = (y_train == 1).sum()
+    negative = int((y_train == 0).sum())
+    positive = int((y_train == 1).sum())
+    if positive == 0 or negative == 0:
+        raise ValueError(
+            f"Stratified train split produced a single-class set: "
+            f"negatives={negative}, positives={positive}. "
+            "This usually happens on very small or highly imbalanced datasets. "
+            "Please upload more data or rebalance labels before training."
+        )
     imbalance_ratio = round(negative / positive, 1)
 
     # Quick CV to decide imbalance strategy
+    capped_spw_quick = min(imbalance_ratio, 10.0)
     quick_model = XGBClassifier(
-        n_estimators=50, max_depth=max_depth, learning_rate=0.05,
-        scale_pos_weight=imbalance_ratio, random_state=42,
+        n_estimators=50,
+        max_depth=max_depth,
+        learning_rate=0.05,
+        scale_pos_weight=capped_spw_quick,
+        random_state=42,
         eval_metric="logloss", verbosity=0,
     )
-    quick_cv = cross_val_score(quick_model, X_train, y_train, cv=3, scoring='roc_auc')
+    # For very small datasets, ensure class counts support the chosen number of folds.
+    min_class_count = min(negative, positive)
+    quick_cv_folds = max(2, min(3, min_class_count))  # 2–3 folds
+    quick_cv = cross_val_score(quick_model, X_train, y_train, cv=quick_cv_folds, scoring='roc_auc')
     signal_strength = quick_cv.mean()
 
-    if signal_strength >= 0.60:
-        sm = SMOTE(random_state=42)
-        X_train_final, y_train_final = sm.fit_resample(X_train, y_train)
-        strategy = "SMOTE"
-        print(f"  ↳ Before SMOTE: Stays={negative}, Quits={positive}")
-        print(f"  ↳ After SMOTE:  Stays={(y_train_final==0).sum()}, Quits={(y_train_final==1).sum()}")
-    else:
-        X_train_final, y_train_final = X_train, y_train
-        strategy = f"scale_pos_weight={imbalance_ratio}"
-        print(f"  ↳ Weak signal (CV AUC {signal_strength:.2f}) — using {strategy} instead of SMOTE")
+    # -- Imbalance strategy: cost-sensitive learning --
+    # scale_pos_weight is derived from the actual class ratio in THIS dataset.
+    # It changes per uploaded dataset (data-driven, not hardcoded).
+    # More stable than SMOTE: no synthetic data, no artificial overfitting.
+    X_train_final, y_train_final = X_train, y_train
+    spw_main = round(min(imbalance_ratio ** 0.5, 10.0), 2)
+    strategy = f"cost-sensitive (scale_pos_weight={spw_main})"
+    print(f"  -> Imbalance ratio: {imbalance_ratio} Stays per Quitter | {strategy}")
 
     # XGBoost with class weighting instead of SMOTE
     model = XGBClassifier(
@@ -176,13 +255,16 @@ def train_attrition_model():
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        min_child_weight=5,       # lowered from 10 → allows finer splits on minority class
+        min_child_weight=5,
         reg_alpha=1.0,
         reg_lambda=2.0,
-        scale_pos_weight=1 if strategy == "SMOTE" else imbalance_ratio,
+        # sqrt(imbalance_ratio): recall-biased but keeps probabilities calibrated.
+        # Full imbalance_ratio pushes probs to 0.9+ for quitters → simulation explodes.
+        # Square root is standard practice for production simulation-based products.
+        scale_pos_weight=spw_main,
         random_state=42,
         eval_metric="logloss",
-        early_stopping_rounds=30,      # increased from 20 — more patience on small datasets
+        early_stopping_rounds=30,
         verbosity=0,
     )
     model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
@@ -266,7 +348,12 @@ def train_attrition_model():
 
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(
-        {"model": model, "threshold": best_threshold, "features": FEATURES},
+        {
+            "model":          model,
+            "threshold":      best_threshold,
+            "features":       FEATURES,
+            "label_encoders": LABEL_ENCODERS,  # saved for consistent inference
+        },
         "backend/ml/exports/quit_probability.pkl"
     )
     print("+++ Model saved to backend/ml/exports/quit_probability.pkl")

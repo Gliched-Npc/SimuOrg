@@ -19,9 +19,10 @@ try:
 except FileNotFoundError:
     calibration = {"prob_scale": 1.0, "stress_amplification": 2.0, "monthly_natural_rate": 0.0145}
 
-STRESS_THRESHOLD     = calibration.get("stress_threshold", 0.5)
-NATURAL_MONTHLY_RATE = calibration.get("monthly_natural_rate", 0.0145)
-PROB_SCALE           = calibration.get("prob_scale", 0.5424)
+STRESS_THRESHOLD      = calibration.get("stress_threshold", 0.5)
+NATURAL_MONTHLY_RATE  = calibration.get("monthly_natural_rate", 0.0145)
+PROB_SCALE            = calibration.get("prob_scale", 0.5424)
+STRESS_AMPLIFICATION  = calibration.get("stress_amplification", 2.0)
 
 
 def load_agents_from_db() -> list[EmployeeAgent]:
@@ -39,6 +40,22 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
         agents = load_agents_from_db()
     if G is None:
         G = build_org_graph(agents)
+
+    if not agents:
+        print("No agents available for simulation. Returning empty results.")
+        return {
+            "config": config.__dict__,
+            "logs": [],
+            "summary": {
+                "policy_name": policy_name,
+                "duration_months": config.duration_months,
+                "initial_headcount": 0,
+                "final_headcount": 0,
+                "total_quits": 0,
+                "total_layoffs": 0,
+                "annual_attrition_pct": 0.0,
+            },
+        }
 
     max_id = max(a.employee_id for a in agents)
     initial_headcount = len([a for a in agents if a.is_active])
@@ -75,7 +92,12 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             yearly_prob  = _quit_model().predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
-            if random.random() < monthly_prob * PROB_SCALE:
+            # Stress amplifier — calibrated from calibration.json, no hardcoding
+            excess_stress = max(0.0, agent.stress - STRESS_THRESHOLD)
+            stress_scale  = 1.0 + STRESS_AMPLIFICATION * excess_stress
+            effective_prob = min(1.0, monthly_prob * PROB_SCALE * stress_scale)
+
+            if random.random() < effective_prob:
                 quitting_agents.append(agent)
 
         # Process departures
@@ -136,14 +158,23 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                     )
 
         #  Metrics
-        active_agents    = [a for a in agents if a.is_active]
-        avg_stress       = np.mean([a.stress            for a in active_agents])
-        avg_productivity = np.mean([a.productivity      for a in active_agents])
-        avg_motivation   = np.mean([a.motivation        for a in active_agents])
-        avg_job_sat      = np.mean([a.job_satisfaction  for a in active_agents])
-        avg_wlb          = np.mean([a.work_life_balance for a in active_agents])
-        avg_loyalty      = np.mean([a.loyalty           for a in active_agents])
-        burnout_count    = sum(1 for a in active_agents if a.stress > a.burnout_limit)
+        active_agents = [a for a in agents if a.is_active]
+        if active_agents:
+            avg_stress       = np.mean([a.stress            for a in active_agents])
+            avg_productivity = np.mean([a.productivity      for a in active_agents])
+            avg_motivation   = np.mean([a.motivation        for a in active_agents])
+            avg_job_sat      = np.mean([a.job_satisfaction  for a in active_agents])
+            avg_wlb          = np.mean([a.work_life_balance for a in active_agents])
+            avg_loyalty      = np.mean([a.loyalty           for a in active_agents])
+            burnout_count    = sum(1 for a in active_agents if a.stress > a.burnout_limit)
+        else:
+            avg_stress       = 0.0
+            avg_productivity = 0.0
+            avg_motivation   = 0.0
+            avg_job_sat      = 0.0
+            avg_wlb          = 0.0
+            avg_loyalty      = 0.0
+            burnout_count    = 0
 
         logs.append({
             "month"                : month,
@@ -173,8 +204,11 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     # Summary
     total_quits       = sum(l["attrition_count"] for l in logs)
     total_layoffs     = sum(l["layoff_count"] for l in logs)
-    final_headcount   = logs[-1]["headcount"]
-    attrition_rate    = total_quits / initial_headcount * 100
+    final_headcount   = logs[-1]["headcount"] if logs else initial_headcount
+    # Convert period attrition into an annualised percentage for business users.
+    period_months     = config.duration_months
+    period_attrition_pct = (total_quits / initial_headcount * 100) if initial_headcount > 0 else 0.0
+    annual_attrition_pct = period_attrition_pct * (12.0 / period_months) if period_months > 0 else period_attrition_pct
 
     print(f"\n{'='*50}")
     print(f"=== Simulation Summary - {policy_name.upper()}")
@@ -184,14 +218,29 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     print(f"   Final Headcount   : {final_headcount}")
     print(f"   Total Quits       : {total_quits}")
     print(f"   Total Layoffs     : {total_layoffs}")
-    print(f"   Attrition Rate    : {attrition_rate:.1f}%")
+    print(f"   Attrition Rate    : {period_attrition_pct:.1f}% "
+          f"(~{annual_attrition_pct:.1f}% annualised)")
     print(f"   Final Avg Stress  : {logs[-1]['avg_stress']:.3f}")
     print(f"   Final Productivity: {logs[-1]['avg_productivity']:.3f}")
     print(f"   Final Burnout     : {logs[-1]['burnout_count']}")
     print(f"{'='*50}")
     print("+++ Simulation complete.")
 
-    return {"config": config.__dict__, "logs": logs}
+    summary = {
+        "policy_name": policy_name,
+        "duration_months": config.duration_months,
+        "initial_headcount": initial_headcount,
+        "final_headcount": final_headcount,
+        "total_quits": total_quits,
+        "total_layoffs": total_layoffs,
+        "period_attrition_pct": round(period_attrition_pct, 2),
+        "annual_attrition_pct": round(annual_attrition_pct, 2),
+        "final_avg_stress": round(float(logs[-1]["avg_stress"]), 4) if logs else 0.0,
+        "final_avg_productivity": round(float(logs[-1]["avg_productivity"]), 4) if logs else 0.0,
+        "final_burnout_count": logs[-1]["burnout_count"] if logs else 0,
+    }
+
+    return {"config": config.__dict__, "logs": logs, "summary": summary}
 
 
 if __name__ == "__main__":

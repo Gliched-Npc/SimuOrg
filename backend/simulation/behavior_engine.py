@@ -13,10 +13,40 @@ except FileNotFoundError:
         "recovery_rate": 0.0104,
         "shockwave_stress_factor": 0.268,
         "shockwave_loyalty_factor": 0.093,
+        "neighbor_stress_weight": 0.01,
+        "fatigue_stress_weight": 0.005,
+        "comm_quality_cap": 5.0,
+        "comm_quality_benefit": 0.001,
+        "fatigue_gain_rate": 0.03,
+        "fatigue_recovery_rate": 0.01,
+        "fatigue_stress_trigger": 0.5,
+        "motivation_recovery_rate": 0.01,
+        "stress_threshold": 0.44,
+        "wlb_stress_buffer": 0.2,
+        "wlb_stress_sensitivity": 1.5,
+        "wlb_drop_rate": 0.15,
+        "wlb_recovery_rate": 0.1,
+        "burnout_productivity_penalty": 0.97,
     }
 
-STRESS_GAIN_RATE = _cal["stress_gain_rate"]
-RECOVERY_RATE    = _cal["recovery_rate"]
+# All constants loaded from calibration.json — zero hardcoded values
+STRESS_GAIN_RATE         = _cal["stress_gain_rate"]
+RECOVERY_RATE            = _cal["recovery_rate"]
+NEIGHBOR_STRESS_WEIGHT   = _cal.get("neighbor_stress_weight", 0.01)
+FATIGUE_STRESS_WEIGHT    = _cal.get("fatigue_stress_weight", 0.005)
+COMM_QUALITY_CAP         = _cal.get("comm_quality_cap", 5.0)
+COMM_QUALITY_BENEFIT     = _cal.get("comm_quality_benefit", 0.001)
+FATIGUE_GAIN_RATE        = _cal.get("fatigue_gain_rate", 0.03)
+FATIGUE_RECOVERY_RATE    = _cal.get("fatigue_recovery_rate", 0.01)
+FATIGUE_STRESS_TRIGGER   = _cal.get("fatigue_stress_trigger", 0.5)
+MOTIVATION_RECOVERY_RATE = _cal.get("motivation_recovery_rate", 0.01)
+STRESS_THRESHOLD         = _cal.get("stress_threshold", 0.44)
+WLB_STRESS_BUFFER        = _cal.get("wlb_stress_buffer", 0.2)
+WLB_STRESS_SENSITIVITY   = _cal.get("wlb_stress_sensitivity", 1.5)
+WLB_DROP_RATE            = _cal.get("wlb_drop_rate", 0.15)
+WLB_RECOVERY_RATE        = _cal.get("wlb_recovery_rate", 0.1)
+BURNOUT_PROD_PENALTY     = _cal.get("burnout_productivity_penalty", 0.97)
+
 _SHOCKWAVE_STRESS_FACTOR  = _cal.get("shockwave_stress_factor", 0.3)
 _SHOCKWAVE_LOYALTY_FACTOR = _cal.get("shockwave_loyalty_factor", 0.1)
 
@@ -48,6 +78,7 @@ def update_agent_state(agent: EmployeeAgent,
                        overtime_bonus: float=0.0):
     """
     Update one agent's behavioral state for one timestep.
+    All constants from calibration.json — no hardcoded values.
     """
     if not agent.is_active:
         return
@@ -55,51 +86,50 @@ def update_agent_state(agent: EmployeeAgent,
     # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)
 
-    # Update stress
+    # Update stress — all weights from calibration
     stress_gain = (
         STRESS_GAIN_RATE * workload_multiplier * stress_gain_rate +
-        0.01 * neighbor_stress +
-        0.005 * agent.fatigue -
-        0.001 * min(comm_quality, 5.0)
+        NEIGHBOR_STRESS_WEIGHT * neighbor_stress +
+        FATIGUE_STRESS_WEIGHT * agent.fatigue -
+        COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
     )
     agent.stress = max(0.0, min(agent.stress + stress_gain, 1.0))
     agent.stress = max(0.0, agent.stress - RECOVERY_RATE)
 
-    # Update fatigue
-    if agent.stress > 0.5:
-        agent.fatigue = min(agent.fatigue + 0.03, 1.0)
+    # Update fatigue — trigger and rates from calibration
+    if agent.stress > FATIGUE_STRESS_TRIGGER:
+        agent.fatigue = min(agent.fatigue + FATIGUE_GAIN_RATE, 1.0)
     else:
-        agent.fatigue = max(agent.fatigue - 0.01, 0.0)
+        agent.fatigue = max(agent.fatigue - FATIGUE_RECOVERY_RATE, 0.0)
 
-    # Update motivation
-    if agent.stress > 0.4:
+    # Update motivation — threshold from calibration
+    if agent.stress > STRESS_THRESHOLD:
         agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
     else:
         # Recover slowly back to their personal baseline
-        agent.motivation = min(agent.motivation + 0.01, agent.baseline_satisfaction / 4.0)
+        agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
     # Sync satisfaction with motivation and stress, capped at baseline
     # Overtime pay provides an artificial monetary buffer to Job Satisfaction
     base_satisfaction = (agent.motivation * 4.0) + overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
     
-    # WLB drifts down slowly from baseline based on stress (requires crossing 0.2 buffer)
-    perceptible_stress = max(0.0, agent.stress - 0.2)
-    target_wlb = max(1.0, min(4.0, agent.baseline_wlb - (perceptible_stress * 1.5)))
+    # WLB drifts down from baseline based on stress (requires crossing calibrated buffer)
+    perceptible_stress = max(0.0, agent.stress - WLB_STRESS_BUFFER)
+    target_wlb = max(1.0, min(4.0, agent.baseline_wlb - (perceptible_stress * WLB_STRESS_SENSITIVITY)))
     
-    # Smooth the drop so it doesn't crash all at once (max drop of 0.15 per month)
+    # Smooth the drop — cap from calibration (no longer hardcoded 0.15)
     if target_wlb < agent.work_life_balance:
-        agent.work_life_balance = max(target_wlb, agent.work_life_balance - 0.15)
+        agent.work_life_balance = max(target_wlb, agent.work_life_balance - WLB_DROP_RATE)
     else:
-        agent.work_life_balance = min(target_wlb, agent.work_life_balance + 0.1)
+        agent.work_life_balance = min(target_wlb, agent.work_life_balance + WLB_RECOVERY_RATE)
 
     # Update productivity
     agent.update_productivity(workload_multiplier)
 
-    # Burnout acceleration
+    # Burnout acceleration — penalty from calibration
     if agent.stress > agent.burnout_limit:
-        # agent.stress = min(agent.stress + 0.02, 1.0)
-        agent.productivity *= 0.97
+        agent.productivity *= BURNOUT_PROD_PENALTY
 
 
 def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
