@@ -110,8 +110,15 @@ def update_agent_state(agent: EmployeeAgent,
         agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
     # Sync satisfaction with motivation and stress, capped at baseline
-    # Overtime pay provides an artificial monetary buffer to Job Satisfaction
-    base_satisfaction = (agent.motivation * 4.0) + overtime_bonus
+    # Overtime pay: only affects agents who actually work overtime (agent.overtime == 1).
+    # Bonus phases out as fatigue builds — money stops compensating once burnout sets in.
+    # fatigue=0.0 → full bonus | fatigue=0.5 → half bonus | fatigue>=1.0 → no bonus
+    effective_overtime_bonus = 0.0
+    if agent.overtime == 1 and overtime_bonus > 0.0:
+        fatigue_discount = max(0.0, 1.0 - agent.fatigue)
+        effective_overtime_bonus = overtime_bonus * fatigue_discount
+
+    base_satisfaction = (agent.motivation * 4.0) + effective_overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
     
     # WLB drifts down from baseline based on stress (requires crossing calibrated buffer)
