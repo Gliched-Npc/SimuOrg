@@ -172,7 +172,7 @@ def encode_overtime(df: pd.DataFrame) -> pd.DataFrame:
         df["overtime"] = df["OverTime"].apply(
             lambda x: 1 if str(x).strip().lower() in {"yes", "1", "true"} else 0
         )
-        print("  ↳ OverTime encoded → overtime (1=Yes, 0=No)")
+        print("  >> OverTime encoded: overtime (1=Yes, 0=No)")
     else:
         df["overtime"] = 0
     return df
@@ -211,12 +211,12 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
     # CompanyTenure → YearsAtCompany 
     if "YearsAtCompany" not in df.columns and "CompanyTenure" in df.columns:
         df["YearsAtCompany"] = df["CompanyTenure"]
-        print("  ↳ YearsAtCompany: derived from CompanyTenure")
+        print("  >> YearsAtCompany: derived from CompanyTenure")
 
     # TotalWorkingYears — new dataset doesn't have this. Proxy = YearsAtCompany.
     if "TotalWorkingYears" not in df.columns and "YearsAtCompany" in df.columns:
         df["TotalWorkingYears"] = df["YearsAtCompany"]
-        print("  ↳ TotalWorkingYears: derived from YearsAtCompany (proxy)")
+        print("  >> TotalWorkingYears: derived from YearsAtCompany (proxy)")
 
     # NumberOfPromotions → YearsSinceLastPromotion (inverse relationship:
     # more promotions ≈ promoted recently → fewer years since last promotion)
@@ -225,7 +225,7 @@ def derive_missing_columns(df: pd.DataFrame) -> pd.DataFrame:
         promo = pd.to_numeric(df["NumberOfPromotions"], errors="coerce").fillna(0)
         # Simple inversion: 0 promotions → ~3 years, 5+ → ~0 years
         df["YearsSinceLastPromotion"] = (3 / (promo + 1)).round(0).astype(int)
-        print("  ↳ YearsSinceLastPromotion: derived from NumberOfPromotions (inverted)")
+        print("  >> YearsSinceLastPromotion: derived from NumberOfPromotions (inverted)")
 
     return df
 
@@ -262,7 +262,7 @@ def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
             mapped_mask = encoded.notna()
             df[col] = df[col].where(~mapped_mask, encoded)  # only overwrite mapped rows
             if mapped_mask.sum() > 0:
-                print(f"  ↳ {col}: {mapped_mask.sum()} string labels encoded to 1-4")
+                print(f"  >> {col}: {mapped_mask.sum()} string labels encoded to 1-4")
 
     # ── JobLevel: encode string tiers to numeric scale ──
     # Handles 'Entry/Mid/Senior' style datasets instead of integers 1-5.
@@ -281,7 +281,7 @@ def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
             )
             mapped_mask = encoded.notna()
             df["JobLevel"] = df["JobLevel"].where(~mapped_mask, encoded)
-            print(f"  ↳ JobLevel: {mapped_mask.sum()} string tiers encoded (Entry=1 Mid=3 Senior=5)")
+            print(f"  >> JobLevel: {mapped_mask.sum()} string tiers encoded (Entry=1 Mid=3 Senior=5)")
 
     return df
 

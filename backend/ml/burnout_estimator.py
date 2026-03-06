@@ -35,16 +35,16 @@ def train_burnout_estimator():
     print("=== Loading data from database...")
     df = load_data_from_db()
 
-    print("\n🔍 Sample Thresholds:")
-    print(f"  Junior L1 (1yr)    → {burnout_threshold(1, 1)}")
-    print(f"  Mid    L2 (5yr)    → {burnout_threshold(2, 5)}")
-    print(f"  Senior L3 (10yr)   → {burnout_threshold(3, 10)}")
-    print(f"  Manager L4 (15yr)  → {burnout_threshold(4, 15)}")
-    print(f"  Director L5 (20yr) → {burnout_threshold(5, 20)}")
+    print("\n=== Sample Thresholds:")
+    print(f"  Junior L1 (1yr)    : {burnout_threshold(1, 1)}")
+    print(f"  Mid    L2 (5yr)    : {burnout_threshold(2, 5)}")
+    print(f"  Senior L3 (10yr)   : {burnout_threshold(3, 10)}")
+    print(f"  Manager L4 (15yr)  : {burnout_threshold(4, 15)}")
+    print(f"  Director L5 (20yr) : {burnout_threshold(5, 20)}")
 
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(burnout_threshold, "backend/ml/exports/burnout_threshold.pkl")
-    print("\n+++ Saved to backend/ml/exports/burnout_threshold.pkl")
+    print("[done] Saved to backend/ml/exports/burnout_threshold.pkl")
 
 
 if __name__ == "__main__":

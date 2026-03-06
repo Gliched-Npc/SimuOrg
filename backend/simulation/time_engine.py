@@ -27,8 +27,16 @@ STRESS_AMPLIFICATION  = calibration.get("stress_amplification", 2.0)
 
 def load_agents_from_db() -> list[EmployeeAgent]:
     with Session(engine) as session:
-        employees = session.exec(select(Employee)).all()
-    return [EmployeeAgent(emp) for emp in employees]
+        all_employees = session.exec(select(Employee)).all()
+
+    # Load all employees regardless of Attrition label.
+    # Attrition="Yes" is past information used to train the ML model.
+    # The simulation asks: who will quit in the future?
+    # The model answers that from features alone, not the historical label.
+    # Hiring replacements happens during the simulation when someone actually quits.
+    agents = [EmployeeAgent(emp) for emp in all_employees]
+    print(f"  >> Loaded {len(agents)} employees (Attrition label ignored)")
+    return agents
 
 
 def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=None, policy_name: str = "custom") -> dict:
@@ -61,7 +69,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     initial_headcount = len([a for a in agents if a.is_active])
     logs   =  []
     for month in range(1, config.duration_months + 1):
-        print(f"📅 Month {month}...")
+        print(f"--- Month {month}...")
 
         #   Update all agent states
         for agent in agents:
@@ -92,9 +100,17 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             yearly_prob  = _quit_model().predict_proba(agent.get_quit_features())[0][1]
             monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
-            # Stress amplifier — calibrated from calibration.json, no hardcoding
-            excess_stress = max(0.0, agent.stress - STRESS_THRESHOLD)
-            stress_scale  = 1.0 + STRESS_AMPLIFICATION * excess_stress
+            # Mid-simulation new hires (years_at_company=0) have zero-valued engineered
+            # features so the model over-scores them. Cap at new_hire_monthly_prob —
+            # derived from real short-tenure employees in calibration, same cap used
+            # in mini-sim so prob_scale stays consistent.
+            if agent.years_at_company == 0:
+                new_hire_cap = calibration.get("new_hire_monthly_prob",
+                                               NATURAL_MONTHLY_RATE * 2.0)
+                monthly_prob = min(monthly_prob, new_hire_cap)
+
+            excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
+            stress_scale   = 1.0 + STRESS_AMPLIFICATION * excess_stress
             effective_prob = min(1.0, monthly_prob * PROB_SCALE * stress_scale)
 
             if random.random() < effective_prob:
@@ -190,15 +206,15 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             "burnout_count"        : burnout_count,
         })
 
-        print(f"   👥 {len(active_agents)} | "
-              f"Quit: {len(quitting_agents)} | "
-              f"Layoff: {len(layoff_agents)} | "
-              f"Stress: {avg_stress:.3f} | "
-              f"Productivity: {avg_productivity:.3f} | "
-              f"JobSat: {avg_job_sat:.2f} | "
-              f"WLB: {avg_wlb:.2f} | "
-              f"Loyalty: {avg_loyalty:.2f} | "
-              f"Burnout: {burnout_count}")
+        print(f"   HC: {len(active_agents)} |"
+              f" Quit: {len(quitting_agents)} |"
+              f" Layoff: {len(layoff_agents)} |"
+              f" Stress: {avg_stress:.3f} |"
+              f" Productivity: {avg_productivity:.3f} |"
+              f" JobSat: {avg_job_sat:.2f} |"
+              f" WLB: {avg_wlb:.2f} |"
+              f" Loyalty: {avg_loyalty:.2f} |"
+              f" Burnout: {burnout_count}")
 
 
     # Summary
@@ -244,6 +260,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
 
 if __name__ == "__main__":
-    policy  = "baseline"
+    policy  = "overtime_pay"
     config  = get_policy(policy)
     results = run_simulation(config, policy_name=policy)

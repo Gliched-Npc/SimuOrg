@@ -14,7 +14,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
     Run simulation multiple times and aggregate results.
     Returns mean, min, max, std for each metric across all runs.
     """
-    print(f"🎲 Running Monte Carlo: {runs} simulations — Policy: {policy_name.upper()}")
+    print(f"=== Running Monte Carlo: {runs} simulations - Policy: {policy_name.upper()}")
 
     # Load once, deepcopy per run for speed and consistency
     base_agents = load_agents_from_db()
@@ -31,7 +31,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
         all_logs.append(result["logs"])
         all_summaries.append(result.get("summary", {}))
 
-    print(f"\n+++ Monte Carlo complete.")
+    print(f"\n[done] Monte Carlo complete.")
 
     # Aggregate across runs for each month
     duration   = len(all_logs[0]) if all_logs else 0

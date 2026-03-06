@@ -24,11 +24,35 @@ def _get_quit_model():
                 "Please upload a dataset first via POST /api/upload/dataset."
             )
         _saved = joblib.load(_QUIT_MODEL_PATH)
+
+        # Reconstruct calibrated wrapper if calibrator is present (new format).
+        # Falls back to raw model for backwards compatibility with old .pkl files.
+        base_model = _saved["model"]
+        calibrator  = _saved.get("calibrator", None)
+
+        if calibrator is not None:
+            import numpy as np
+            from sklearn.isotonic import IsotonicRegression
+
+            class _CalibratedModel:
+                def __init__(self, base, cal):
+                    self.base_model = base
+                    self.calibrator  = cal
+
+                def predict_proba(self, X):
+                    raw = self.base_model.predict_proba(X)[:, 1]
+                    cal = self.calibrator.predict(raw)
+                    return np.column_stack([1 - cal, cal])
+
+            loaded_model = _CalibratedModel(base_model, calibrator)
+        else:
+            loaded_model = base_model  # backwards-compatible
+
         _quit_model_cache = {
-            "model":          _saved["model"],
+            "model":          loaded_model,
             "threshold":      _saved["threshold"],
             "features":       _saved["features"],
-            "label_encoders": _saved.get("label_encoders", {}),  # backwards-compatible
+            "label_encoders": _saved.get("label_encoders", {}),
         }
     return _quit_model_cache
 
@@ -113,7 +137,6 @@ class EmployeeAgent:
             "marital_status":             self.marital_status or random.choice(["Single", "Married", "Divorced"]),
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
-            "business_travel":            self.business_travel,
             # Categorical — needed so engineer_features can create *_encoded columns
             "department":                 self.department,
             "job_role":                   self.job_role,

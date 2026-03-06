@@ -21,7 +21,7 @@ class OrgGraph:
             self.G = nx.Graph()
             
     def _build_graph(self, agents: list[EmployeeAgent]) -> nx.Graph:
-        print("🔨 Building organizational graph from scratch...")
+        print("=== Building organizational graph from scratch...")
         G = nx.Graph()
         
         # Add all agents as nodes
@@ -110,7 +110,7 @@ class OrgGraph:
                             )
                             skip_count += 1
                             
-        print(f"+++ Graph built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+        print(f"[done] Graph built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
         return G
 
     # --- NETWORKX EXPOSED METHODS ___

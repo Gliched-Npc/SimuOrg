@@ -10,7 +10,7 @@ from backend.models import Employee
 
 
 def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
-    print("🧹 Cleaning data...")
+    print("=== Cleaning data...")
 
     # --- EmployeeID ---
     df['EmployeeID'] = pd.to_numeric(df['EmployeeID'], errors='coerce')
@@ -22,7 +22,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     df = df.drop_duplicates(subset=['EmployeeID'])
     duplicates_removed = before - len(df)
     if duplicates_removed > 0:
-        print(f"  ↳ Removed {duplicates_removed} duplicate EmployeeIDs")
+        print(f"  >> Removed {duplicates_removed} duplicate EmployeeIDs")
 
     # --- ManagerID ---
     df['ManagerID'] = pd.to_numeric(df['ManagerID'], errors='coerce')
@@ -36,7 +36,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     # --- JobLevel ---
     df['JobLevel'] = pd.to_numeric(df['JobLevel'], errors='coerce')
     df['JobLevel'] = df['JobLevel'].round(0).fillna(1).astype(int)
-    df['JobLevel'] = df['JobLevel'].clip(lower=1)
+    df['JobLevel'] = df['JobLevel'].clip(lower=1, upper=5)
 
     # --- MonthlyIncome ---
     df['MonthlyIncome'] = pd.to_numeric(df['MonthlyIncome'], errors='coerce')
@@ -101,7 +101,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
             missing = df[col].isna().sum()
             df[col] = df[col].fillna(df[col].median())
             if missing > 0:
-                print(f"  ↳ {col}: filled {missing} nulls with median")
+                print(f"  >> {col}: filled {missing} nulls with median")
 
     # --- Clip satisfaction scores ---
     for col in ['JobSatisfaction', 'WorkLifeBalance', 'EnvironmentSatisfaction']:
@@ -120,7 +120,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     # NOTE: OverTime is already encoded to `overtime` by schema.normalize_dataframe()
     # before clean_dataframe() is called — no re-encoding needed here.
 
-    print(f"+++ Cleaning done. {len(df)} rows ready.")
+    print(f"[done] Cleaning done. {len(df)} rows ready.")
     return df, duplicates_removed
 
 
@@ -218,7 +218,7 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
         session.add_all(employees)
         session.commit()
 
-    print(f"+++ SUCCESS! {len(employees)} employees ingested. Skipped: {skipped}")
+    print(f"[done] {len(employees)} employees ingested. Skipped: {skipped}")
     return {"ingested": len(employees), "skipped": skipped}
 
 
@@ -233,10 +233,10 @@ def ingest_data():
         print("--- Error: File not found in backend/data/")
         return
 
-    print(f"📄 Found {len(df)} rows. Normalizing...")
+    print(f">> Found {len(df)} rows. Normalizing...")
     from backend.schema import normalize_dataframe
     df, *_ = normalize_dataframe(df)   # same normalization as Swagger path
-    print(f"📄 Cleaning...")
+    print(">> Cleaning...")
     df, _ = clean_dataframe(df)
     ingest_from_dataframe(df)
 

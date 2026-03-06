@@ -4,51 +4,42 @@ from backend.simulation.agent import EmployeeAgent
 from backend.simulation.org_graph import build_org_graph, OrgGraph
 import json
 
-try:
-    with open("backend/ml/exports/calibration.json") as f:
-        _cal = json.load(f)
-except FileNotFoundError:
-    _cal = {
-        "stress_gain_rate": 0.0132,
-        "recovery_rate": 0.0104,
-        "shockwave_stress_factor": 0.268,
-        "shockwave_loyalty_factor": 0.093,
-        "neighbor_stress_weight": 0.01,
-        "fatigue_stress_weight": 0.005,
-        "comm_quality_cap": 5.0,
-        "comm_quality_benefit": 0.001,
-        "fatigue_gain_rate": 0.03,
-        "fatigue_recovery_rate": 0.01,
-        "fatigue_stress_trigger": 0.5,
-        "motivation_recovery_rate": 0.01,
-        "stress_threshold": 0.44,
-        "wlb_stress_buffer": 0.2,
-        "wlb_stress_sensitivity": 1.5,
-        "wlb_drop_rate": 0.15,
-        "wlb_recovery_rate": 0.1,
-        "burnout_productivity_penalty": 0.97,
-    }
+_calibration_cache = None
 
-# All constants loaded from calibration.json — zero hardcoded values
-STRESS_GAIN_RATE         = _cal["stress_gain_rate"]
-RECOVERY_RATE            = _cal["recovery_rate"]
-NEIGHBOR_STRESS_WEIGHT   = _cal.get("neighbor_stress_weight", 0.01)
-FATIGUE_STRESS_WEIGHT    = _cal.get("fatigue_stress_weight", 0.005)
-COMM_QUALITY_CAP         = _cal.get("comm_quality_cap", 5.0)
-COMM_QUALITY_BENEFIT     = _cal.get("comm_quality_benefit", 0.001)
-FATIGUE_GAIN_RATE        = _cal.get("fatigue_gain_rate", 0.03)
-FATIGUE_RECOVERY_RATE    = _cal.get("fatigue_recovery_rate", 0.01)
-FATIGUE_STRESS_TRIGGER   = _cal.get("fatigue_stress_trigger", 0.5)
-MOTIVATION_RECOVERY_RATE = _cal.get("motivation_recovery_rate", 0.01)
-STRESS_THRESHOLD         = _cal.get("stress_threshold", 0.44)
-WLB_STRESS_BUFFER        = _cal.get("wlb_stress_buffer", 0.2)
-WLB_STRESS_SENSITIVITY   = _cal.get("wlb_stress_sensitivity", 1.5)
-WLB_DROP_RATE            = _cal.get("wlb_drop_rate", 0.15)
-WLB_RECOVERY_RATE        = _cal.get("wlb_recovery_rate", 0.1)
-BURNOUT_PROD_PENALTY     = _cal.get("burnout_productivity_penalty", 0.97)
+def _load_calibration():
+    """Lazy-load calibration — re-reads after retrain without server restart."""
+    global _calibration_cache
+    if _calibration_cache is None:
+        try:
+            with open("backend/ml/exports/calibration.json") as f:
+                _calibration_cache = json.load(f)
+        except FileNotFoundError:
+            _calibration_cache = {
+                "stress_gain_rate": 0.0132,
+                "behavior_stress_gain_rate": 0.0264,
+                "recovery_rate": 0.0104,
+                "shockwave_stress_factor": 0.268,
+                "shockwave_loyalty_factor": 0.093,
+                "neighbor_stress_weight": 0.01,
+                "fatigue_stress_weight": 0.005,
+                "comm_quality_cap": 5.0,
+                "comm_quality_benefit": 0.001,
+                "fatigue_gain_rate": 0.03,
+                "fatigue_recovery_rate": 0.01,
+                "fatigue_stress_trigger": 0.5,
+                "motivation_recovery_rate": 0.01,
+                "stress_threshold": 0.44,
+                "wlb_stress_buffer": 0.2,
+                "wlb_stress_sensitivity": 1.5,
+                "wlb_drop_rate": 0.15,
+                "wlb_recovery_rate": 0.1,
+                "burnout_productivity_penalty": 0.97,
+            }
+    return _calibration_cache
 
-_SHOCKWAVE_STRESS_FACTOR  = _cal.get("shockwave_stress_factor", 0.3)
-_SHOCKWAVE_LOYALTY_FACTOR = _cal.get("shockwave_loyalty_factor", 0.1)
+# All constants resolved lazily via _load_calibration() on first call
+def _c(key, default):
+    return _load_calibration().get(key, default)
 
 def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float, float]:
     """
@@ -70,49 +61,74 @@ def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float
     return neighbor_stress, comm_quality
 
 
-def update_agent_state(agent: EmployeeAgent, 
-                       G: OrgGraph, 
+def update_agent_state(agent: EmployeeAgent,
+                       G: OrgGraph,
                        workload_multiplier: float,
                        motivation_decay_rate: float,
                        stress_gain_rate: float=1.0,
                        overtime_bonus: float=0.0):
     """
     Update one agent's behavioral state for one timestep.
-    All constants from calibration.json — no hardcoded values.
+    All constants from calibration.json via lazy loader — picks up retrain without restart.
     """
     if not agent.is_active:
         return
 
+    # Resolve constants lazily each call (cached after first load)
+    STRESS_GAIN_RATE       = _c("behavior_stress_gain_rate", _c("stress_gain_rate", 0.0132))
+    RECOVERY_RATE          = _c("recovery_rate", 0.0104)
+    NEIGHBOR_STRESS_WEIGHT = _c("neighbor_stress_weight", 0.01)
+    FATIGUE_STRESS_WEIGHT  = _c("fatigue_stress_weight", 0.005)
+    COMM_QUALITY_CAP       = _c("comm_quality_cap", 5.0)
+    COMM_QUALITY_BENEFIT   = _c("comm_quality_benefit", 0.001)
+    FATIGUE_GAIN_RATE      = _c("fatigue_gain_rate", 0.03)
+    FATIGUE_RECOVERY_RATE  = _c("fatigue_recovery_rate", 0.01)
+    FATIGUE_STRESS_TRIGGER = _c("fatigue_stress_trigger", 0.5)
+    MOTIVATION_RECOVERY_RATE = _c("motivation_recovery_rate", 0.01)
+    STRESS_THRESHOLD       = _c("stress_threshold", 0.44)
+    WLB_STRESS_BUFFER      = _c("wlb_stress_buffer", 0.2)
+    WLB_STRESS_SENSITIVITY = _c("wlb_stress_sensitivity", 1.5)
+    WLB_DROP_RATE          = _c("wlb_drop_rate", 0.15)
+    WLB_RECOVERY_RATE      = _c("wlb_recovery_rate", 0.1)
+    BURNOUT_PROD_PENALTY   = _c("burnout_productivity_penalty", 0.97)
+    SHOCKWAVE_STRESS_FACTOR  = _c("shockwave_stress_factor", 0.3)
+    SHOCKWAVE_LOYALTY_FACTOR = _c("shockwave_loyalty_factor", 0.1)
+
     # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)
 
-    # Update stress — all weights from calibration
-    stress_gain = (
-        STRESS_GAIN_RATE * workload_multiplier * stress_gain_rate +
-        NEIGHBOR_STRESS_WEIGHT * neighbor_stress +
-        FATIGUE_STRESS_WEIGHT * agent.fatigue -
-        COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
-    )
-    agent.stress = max(0.0, min(agent.stress + stress_gain, 1.0))
-    agent.stress = max(0.0, agent.stress - RECOVERY_RATE)
+    # Quadratic workload scaling — high pressure is meaningfully worse than linear
+    # workload=1.0 → 1.0x | workload=1.3 → 1.69x | workload=1.5 → 2.25x
+    workload_stress_factor = workload_multiplier ** 2
 
-    # Update fatigue — trigger and rates from calibration
+    # Stress accumulates each month. Net gain is positive under pressure.
+    stress_gain = (
+        STRESS_GAIN_RATE * workload_stress_factor * stress_gain_rate
+        + NEIGHBOR_STRESS_WEIGHT * neighbor_stress
+        + FATIGUE_STRESS_WEIGHT * agent.fatigue
+        - COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
+    )
+    agent.stress = max(0.0, min(agent.stress + stress_gain - RECOVERY_RATE, 1.0))
+
+    # Fatigue
     if agent.stress > FATIGUE_STRESS_TRIGGER:
         agent.fatigue = min(agent.fatigue + FATIGUE_GAIN_RATE, 1.0)
     else:
         agent.fatigue = max(agent.fatigue - FATIGUE_RECOVERY_RATE, 0.0)
 
-    # Update motivation — threshold from calibration
+    # Motivation decays under stress OR high workload.
+    # Exception: when overtime_bonus > 0, pay compensates for workload — no workload decay
+    # until stress crosses threshold (fatigue eventually overwhelms the pay benefit).
     if agent.stress > STRESS_THRESHOLD:
         agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
+    elif workload_multiplier > 1.0 and overtime_bonus == 0.0:
+        # High workload without pay compensation grinds motivation down
+        workload_decay = motivation_decay_rate * (workload_multiplier - 1.0) * 1.5
+        agent.motivation = max(agent.motivation - workload_decay, 0.0)
     else:
-        # Recover slowly back to their personal baseline
         agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
-    # Sync satisfaction with motivation and stress, capped at baseline
-    # Overtime pay: only affects agents who actually work overtime (agent.overtime == 1).
-    # Bonus phases out as fatigue builds — money stops compensating once burnout sets in.
-    # fatigue=0.0 → full bonus | fatigue=0.5 → half bonus | fatigue>=1.0 → no bonus
+    # Overtime pay bonus — phases out with fatigue
     effective_overtime_bonus = 0.0
     if agent.overtime == 1 and overtime_bonus > 0.0:
         fatigue_discount = max(0.0, 1.0 - agent.fatigue)
@@ -120,21 +136,19 @@ def update_agent_state(agent: EmployeeAgent,
 
     base_satisfaction = (agent.motivation * 4.0) + effective_overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
-    
-    # WLB drifts down from baseline based on stress (requires crossing calibrated buffer)
+
+    # WLB drifts down based on stress above buffer
     perceptible_stress = max(0.0, agent.stress - WLB_STRESS_BUFFER)
     target_wlb = max(1.0, min(4.0, agent.baseline_wlb - (perceptible_stress * WLB_STRESS_SENSITIVITY)))
-    
-    # Smooth the drop — cap from calibration (no longer hardcoded 0.15)
     if target_wlb < agent.work_life_balance:
         agent.work_life_balance = max(target_wlb, agent.work_life_balance - WLB_DROP_RATE)
     else:
         agent.work_life_balance = min(target_wlb, agent.work_life_balance + WLB_RECOVERY_RATE)
 
-    # Update productivity
+    # Productivity
     agent.update_productivity(workload_multiplier)
 
-    # Burnout acceleration — penalty from calibration
+    # Burnout penalty
     if agent.stress > agent.burnout_limit:
         agent.productivity *= BURNOUT_PROD_PENALTY
 
@@ -142,18 +156,16 @@ def update_agent_state(agent: EmployeeAgent,
 def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
                                G: OrgGraph,
                                shock_factor: float):
-    """
-    When an agent quits, their neighbors feel the impact.
-    """
+    """When an agent quits, their neighbors feel the impact."""
+    shockwave_stress  = _c("shockwave_stress_factor", 0.3)
+    shockwave_loyalty = _c("shockwave_loyalty_factor", 0.1)
     for neighbor_id in list(G.neighbors(quitting_agent.employee_id)):
         edge_data = G[quitting_agent.employee_id][neighbor_id]
         weight = edge_data.get("weight", 0.5)
         neighbor_agent = G.nodes[neighbor_id].get("agent")
 
         if neighbor_agent and neighbor_agent.is_active:
-            neighbor_agent.stress  += shock_factor * weight * _SHOCKWAVE_STRESS_FACTOR
-            neighbor_agent.loyalty -= shock_factor * weight * _SHOCKWAVE_LOYALTY_FACTOR
-
-            # Cap values
+            neighbor_agent.stress  += shock_factor * weight * shockwave_stress
+            neighbor_agent.loyalty -= shock_factor * weight * shockwave_loyalty
             neighbor_agent.stress  = min(neighbor_agent.stress, 1.0)
             neighbor_agent.loyalty = max(neighbor_agent.loyalty, 0.0)

@@ -9,6 +9,7 @@ from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
+from sklearn.isotonic import IsotonicRegression
 
 from backend.database import engine
 from backend.models import Employee
@@ -109,15 +110,17 @@ def get_active_features(df: pd.DataFrame) -> list[str]:
     for opt in OPTIONAL_FEATURES:
         if opt in df.columns and df[opt].std() > 0:
             features.append(opt)
-            print(f"  ↳ Bonus feature '{opt}' found with signal — added to model")
+            print(f"  >> Bonus feature '{opt}' found with signal - added to model")
 
     return features
 
 
 
 # Minimum precision floor for the recall-optimised threshold tuner.
-# At 0.30: for every 10 flagged employees, at least 3 are real quitters.
-MIN_PRECISION_FLOOR = 0.30
+# At 0.50: for every 10 flagged employees, at least 5 are real quitters.
+# Raised from 0.30 → 0.50 after calibration improved precision significantly.
+# This forces the threshold above the 0.10 search floor and gives a meaningful answer.
+MIN_PRECISION_FLOOR = 0.50
 
 
 def tune_threshold(model, X_val, y_val) -> float:
@@ -131,7 +134,7 @@ def tune_threshold(model, X_val, y_val) -> float:
     fallback_threshold = 0.5
     fallback_f1        = 0.0
 
-    for t in np.arange(0.10, 0.75, 0.01):
+    for t in np.arange(0.05, 0.85, 0.01):
         preds = (probs > t).astype(int)
         if preds.sum() == 0:
             continue
@@ -162,15 +165,21 @@ def train_attrition_model():
     global FEATURES
 
     print("=== Loading data from database...")
+
     df = load_data_from_db()
+    print("Rows loaded from DB:", len(df))
+
     df = df.drop(columns=['employee_id', 'simulation_id'], errors='ignore')
-    df = df.drop_duplicates()
+    print("After column drop:", len(df))
+
+    # df = df.drop_duplicates()
+    # print("After duplicate removal:", len(df))
 
     df[TARGET] = df[TARGET].map({"Yes": 1, "No": 0})
     df = df.dropna(subset=[TARGET])
 
     n_samples = len(df)
-    print(f"  ↳ {n_samples} employees loaded")
+    print(f"  >> {n_samples} employees loaded")
 
     df = engineer_features(df)
 
@@ -179,7 +188,7 @@ def train_attrition_model():
     active_base     = [f for f in FEATURES if f in BASE_FEATURES]
     active_optional = [f for f in FEATURES if f in OPTIONAL_FEATURES]
     dropped_base    = [f for f in BASE_FEATURES if f not in FEATURES]
-    print(f"  ↳ Using {len(FEATURES)} features "
+    print(f"  >> Using {len(FEATURES)} features "
           f"({len(active_base)} base + {len(active_optional)} optional"
           + (f", dropped {len(dropped_base)}: {dropped_base}" if dropped_base else "") + ")")
 
@@ -201,7 +210,7 @@ def train_attrition_model():
     else:
         max_depth = 5
 
-    print(f"  ↳ Dataset size: {n_samples} → max_depth: {max_depth}")
+    print(f"  >> Dataset size: {n_samples} -> max_depth: {max_depth}")
 
     # 3-way split
     X_trainval, X_test, y_trainval, y_test = train_test_split(
@@ -210,7 +219,7 @@ def train_attrition_model():
     X_train, X_val, y_train, y_val = train_test_split(
         X_trainval, y_trainval, test_size=0.25, random_state=42, stratify=y_trainval
     )
-    print(f"  ↳ Split: Train={len(X_train)} | Val={len(X_val)} | Test={len(X_test)}")
+    print(f"  >> Split: Train={len(X_train)} | Val={len(X_val)} | Test={len(X_test)}")
 
     negative = int((y_train == 0).sum())
     positive = int((y_train == 1).sum())
@@ -248,8 +257,11 @@ def train_attrition_model():
     strategy = f"cost-sensitive (scale_pos_weight={spw_main})"
     print(f"  -> Imbalance ratio: {imbalance_ratio} Stays per Quitter | {strategy}")
 
-    # XGBoost with class weighting instead of SMOTE
-    model = XGBClassifier(
+    # Step 1 — Train XGBoost with early stopping to find best_iteration
+    # We use scale_pos_weight to handle class imbalance during learning,
+    # but this distorts raw probability outputs (known XGBoost limitation).
+    # CalibratedClassifierCV in Step 2 corrects the probabilities afterward.
+    _early_stop_model = XGBClassifier(
         n_estimators=200,
         max_depth=max_depth,
         learning_rate=0.05,
@@ -258,19 +270,61 @@ def train_attrition_model():
         min_child_weight=5,
         reg_alpha=1.0,
         reg_lambda=2.0,
-        # sqrt(imbalance_ratio): recall-biased but keeps probabilities calibrated.
-        # Full imbalance_ratio pushes probs to 0.9+ for quitters → simulation explodes.
-        # Square root is standard practice for production simulation-based products.
         scale_pos_weight=spw_main,
         random_state=42,
         eval_metric="logloss",
         early_stopping_rounds=30,
         verbosity=0,
     )
-    model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
-    print(f"  ↳ Best iteration: {model.best_iteration} / 200")
+    _early_stop_model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
+    best_iter = _early_stop_model.best_iteration
+    print(f"  >> Best iteration: {best_iter} / 200")
 
-    print("🔧 Tuning decision threshold on validation set...")
+    # Step 2 — Refit without early_stopping_rounds using best_iter
+    # CalibratedClassifierCV requires a model without early_stopping_rounds
+    # because it does its own internal fitting during calibration.
+    base_model = XGBClassifier(
+        n_estimators=best_iter,
+        max_depth=max_depth,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        reg_alpha=1.0,
+        reg_lambda=2.0,
+        scale_pos_weight=spw_main,
+        random_state=42,
+        eval_metric="logloss",
+        verbosity=0,
+    )
+    base_model.fit(X_train_final, y_train_final)
+
+    # Step 3 — Calibrate probabilities using val set (isotonic regression)
+    # scale_pos_weight distorts raw XGBoost probabilities — the model learns ranking
+    # well (AUC stays high) but raw scores are inflated, causing threshold=0.12.
+    # Isotonic regression learns a monotonic mapping: raw_score → true_probability
+    # using the val set. This is version-independent and doesn't require refitting.
+    raw_val_probs = base_model.predict_proba(X_val)[:, 1]
+    calibrator = IsotonicRegression(out_of_bounds='clip')
+    calibrator.fit(raw_val_probs, y_val)
+
+    # Thin wrapper so the rest of the code calls model.predict_proba(X) as normal
+    class _CalibratedModel:
+        def __init__(self, base, cal):
+            self.base_model = base
+            self.calibrator  = cal
+            # Expose feature_importances_ so CV / any downstream code still works
+            self.feature_importances_ = base.feature_importances_
+
+        def predict_proba(self, X):
+            raw   = self.base_model.predict_proba(X)[:, 1]
+            cal   = self.calibrator.predict(raw)
+            return np.column_stack([1 - cal, cal])
+
+    model = _CalibratedModel(base_model, calibrator)
+    print(f"  >> Probabilities calibrated via isotonic regression on val set ({len(X_val)} samples)")
+
+    print("--- Tuning decision threshold on validation set...")
     best_threshold = tune_threshold(model, X_val, y_val)
 
     test_probs    = model.predict_proba(X_test)[:, 1]
@@ -286,7 +340,7 @@ def train_attrition_model():
     print(classification_report(y_test, y_pred_test, target_names=["Stays", "Quits"]))
     print(f"=== AUC-ROC: {auc:.4f}")
 
-    print(f"\n🔍 Training Performance (pre-{strategy} train set):")
+    print(f"\n=== Training Performance (pre-{strategy} train set):")
     print(classification_report(y_train, y_pred_train, target_names=["Stays", "Quits"]))
 
     print(f"\n=== Accuracy Summary:")
@@ -295,10 +349,11 @@ def train_attrition_model():
     print(f"  Overfitting Gap   : {(train_accuracy - test_accuracy)*100:.2f}%")
     print(f"  AUC-ROC           : {auc:.4f}")
 
-    # Cross-validation
-    print("\n🔬 Cross-Validation Diagnostic (5-fold on full data):")
+    # Cross-validation on base (uncalibrated) model — calibration doesn't affect AUC ranking,
+    # only probability values, so CV on base model gives the true signal strength estimate.
+    print("\n=== Cross-Validation Diagnostic (5-fold on full data):")
     cv_model = XGBClassifier(
-        n_estimators=model.best_iteration,
+        n_estimators=best_iter,
         max_depth=max_depth,
         learning_rate=0.05,
         subsample=0.8,
@@ -349,16 +404,17 @@ def train_attrition_model():
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(
         {
-            "model":          model,
+            "model":          model.base_model,   # XGBoost base (for CV compatibility)
+            "calibrator":     model.calibrator,   # isotonic calibrator
             "threshold":      best_threshold,
             "features":       FEATURES,
-            "label_encoders": LABEL_ENCODERS,  # saved for consistent inference
+            "label_encoders": LABEL_ENCODERS,
         },
         "backend/ml/exports/quit_probability.pkl"
     )
-    print("+++ Model saved to backend/ml/exports/quit_probability.pkl")
+    print("[done] Model saved to backend/ml/exports/quit_probability.pkl")
     return quality_report
 
 
 if __name__ == "__main__":
-    train_attrition_model()
+    train_attrition_model() 
