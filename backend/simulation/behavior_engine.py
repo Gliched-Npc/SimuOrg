@@ -65,8 +65,9 @@ def update_agent_state(agent: EmployeeAgent,
                        G: OrgGraph,
                        workload_multiplier: float,
                        motivation_decay_rate: float,
-                       stress_gain_rate: float=1.0,
-                       overtime_bonus: float=0.0):
+                       stress_gain_rate: float = 1.0,
+                       overtime_bonus: float = 0.0,
+                       wlb_boost: float = 0.0):
     """
     Update one agent's behavioral state for one timestep.
     All constants from calibration.json via lazy loader — picks up retrain without restart.
@@ -102,12 +103,18 @@ def update_agent_state(agent: EmployeeAgent,
     workload_stress_factor = workload_multiplier ** 2
 
     # Stress accumulates each month. Net gain is positive under pressure.
-    stress_gain = (
+    # Overtime pay provides a stress dampener — being compensated fairly
+    # reduces subjective stress from overwork (rational agent effect).
+    # The relief is proportional to bonus but capped at 50% of raw gain
+    # so stress can still build under extreme workload.
+    raw_stress_gain = (
         STRESS_GAIN_RATE * workload_stress_factor * stress_gain_rate
         + NEIGHBOR_STRESS_WEIGHT * neighbor_stress
         + FATIGUE_STRESS_WEIGHT * agent.fatigue
         - COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
     )
+    overtime_stress_relief = min(raw_stress_gain * 0.5, overtime_bonus * 0.02) if overtime_bonus > 0.0 else 0.0
+    stress_gain = raw_stress_gain - overtime_stress_relief
     agent.stress = max(0.0, min(agent.stress + stress_gain - RECOVERY_RATE, 1.0))
 
     # Fatigue
@@ -137,9 +144,19 @@ def update_agent_state(agent: EmployeeAgent,
     base_satisfaction = (agent.motivation * 4.0) + effective_overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
 
-    # WLB drifts down based on stress above buffer
+    # Overtime loyalty gain — being fairly compensated builds commitment.
+    # Small per-month effect but persistent: loyalty grows when overtime is paid,
+    # making well-compensated employees more likely to stay long-term.
+    if agent.overtime == 1 and overtime_bonus > 0.0:
+        loyalty_gain = overtime_bonus * 0.003 * (1.0 - agent.fatigue)
+        agent.loyalty = min(1.0, agent.loyalty + loyalty_gain)
+
+    # WLB drifts toward a target based on stress above the buffer.
+    # wlb_boost raises the target ceiling — used by flexible/remote policies
+    # to reflect that autonomy and schedule control genuinely improve WLB
+    # beyond what stress reduction alone achieves.
     perceptible_stress = max(0.0, agent.stress - WLB_STRESS_BUFFER)
-    target_wlb = max(1.0, min(4.0, agent.baseline_wlb - (perceptible_stress * WLB_STRESS_SENSITIVITY)))
+    target_wlb = max(1.0, min(4.0, agent.baseline_wlb + wlb_boost - (perceptible_stress * WLB_STRESS_SENSITIVITY)))
     if target_wlb < agent.work_life_balance:
         agent.work_life_balance = max(target_wlb, agent.work_life_balance - WLB_DROP_RATE)
     else:
@@ -148,9 +165,15 @@ def update_agent_state(agent: EmployeeAgent,
     # Productivity
     agent.update_productivity(workload_multiplier)
 
-    # Burnout penalty
+    # Burnout penalty — graduated, not binary.
+    # A binary on/off penalty causes a "burnout cliff" where thousands of employees
+    # suddenly drop productivity in the same month.
+    # Graduated penalty: scales with how far stress exceeds the burnout_limit,
+    # so the productivity curve degrades smoothly rather than collapsing at once.
     if agent.stress > agent.burnout_limit:
-        agent.productivity *= BURNOUT_PROD_PENALTY
+        overshoot = (agent.stress - agent.burnout_limit) / max(1.0 - agent.burnout_limit, 0.01)
+        burnout_penalty = BURNOUT_PROD_PENALTY ** (1.0 + overshoot)
+        agent.productivity *= burnout_penalty
 
 
 def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
@@ -165,7 +188,11 @@ def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
         neighbor_agent = G.nodes[neighbor_id].get("agent")
 
         if neighbor_agent and neighbor_agent.is_active:
-            neighbor_agent.stress  += shock_factor * weight * shockwave_stress
+            # Cascade velocity cap: max stress added per quit event = 0.05.
+            # Without this, a single mass-layoff instantly pushes every neighbor
+            # over threshold, creating an unrealistic avalanche in one month.
+            raw_stress_hit = shock_factor * weight * shockwave_stress
+            neighbour_stress_delta = min(raw_stress_hit, 0.05)
+            neighbor_agent.stress  = min(neighbor_agent.stress + neighbour_stress_delta, 1.0)
             neighbor_agent.loyalty -= shock_factor * weight * shockwave_loyalty
-            neighbor_agent.stress  = min(neighbor_agent.stress, 1.0)
             neighbor_agent.loyalty = max(neighbor_agent.loyalty, 0.0)

@@ -17,8 +17,9 @@ def productivity_decay(stress: float, fatigue: float,
     
     # Crunch Culture Mechanic
     if workload_multiplier > 1.0:
-        # Boost productivity based on workload pressure
-        crunch_boost = (workload_multiplier - 1.0) * 0.8 
+        # Small short-term boost — pressure increases output, but only modestly.
+        # Empirical range: 5-15% spike in month 1 under pressure (not 20-30%).
+        crunch_boost = (workload_multiplier - 1.0) * 0.3
         
         # But fatigue aggressively destroys the crunch effort
         # A fresh employee thrives on crunch, a tired employee crashes.

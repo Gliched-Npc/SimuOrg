@@ -263,8 +263,35 @@ def encode_satisfaction_scores(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].where(~mapped_mask, encoded)  # only overwrite mapped rows
             if mapped_mask.sum() > 0:
                 print(f"  >> {col}: {mapped_mask.sum()} string labels encoded to 1-4")
+    # -- Numeric satisfaction scale normalization --
+    # Handles datasets where satisfaction columns are numeric but on a non-1-4 scale
+    # (e.g. 1-5, 1-7, 1-10). These pass through string detection unchanged.
+    # Uses fixed linear maps per detected scale — NOT min-max, which is distribution-
+    # sensitive and silently distorts meaning if no employee rates at the extremes.
+    SCALE_MAPS = {
+        5:  lambda x: 1 + (x - 1) * (3 / 4),   # 1->1, 3->2.5, 5->4
+        7:  lambda x: 1 + (x - 1) * (3 / 6),   # 1->1, 4->2.5, 7->4
+        10: lambda x: 1 + (x - 1) * (3 / 9),   # 1->1, 5->2.33, 10->4
+    }
+    sat_cols = ["JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction"]
+    for col in sat_cols:
+        if col not in df.columns:
+            continue
+        numeric_col = pd.to_numeric(df[col], errors="coerce")
+        col_max = int(numeric_col.dropna().max()) if numeric_col.notna().any() else 4
+        if col_max > 4 and col_max in SCALE_MAPS:
+            df[col] = numeric_col.apply(
+                lambda x: round(SCALE_MAPS[col_max](x), 2) if pd.notna(x) else x
+            )
+            print(f"  >> {col}: fixed-step normalized from 1-{col_max} to 1-4")
+        elif col_max > 4:
+            # Unknown scale — fall back to linear clamp, clip handles the rest in upload.py
+            df[col] = numeric_col.apply(
+                lambda x: round(1 + (x - 1) / (col_max - 1) * 3, 2) if pd.notna(x) else x
+            )
+            print(f"  >> {col}: linear-mapped from 1-{col_max} scale to 1-4")
 
-    # ── JobLevel: encode string tiers to numeric scale ──
+    # -- JobLevel: encode string tiers to numeric scale --
     # Handles 'Entry/Mid/Senior' style datasets instead of integers 1-5.
     job_level_map = {
         "entry":        1, "entry level":  1, "junior":       1,

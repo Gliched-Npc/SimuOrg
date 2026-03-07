@@ -96,10 +96,18 @@ class EmployeeAgent:
         self.business_travel = getattr(db_employee, "business_travel", 0) or 0
 
         # Simulation state
-        self.baseline_satisfaction= db_employee.job_satisfaction
-        self.baseline_wlb         = db_employee.work_life_balance
-        
-        self.stress       = 0.0
+        self.baseline_satisfaction = db_employee.job_satisfaction
+        self.baseline_wlb          = db_employee.work_life_balance
+
+        # Ambient initial stress — employees don't start at zero.
+        # Years of work accumulate psychological load. Dissatisfied employees
+        # carry more. Long-tenured employees have had more time to build it up.
+        # Scale: satisfaction 1→ ~15% of threshold | satisfaction 4 → ~0%
+        #        tenure 10+yr adds another 10% of threshold
+        _sat_stress    = max(0.0, (4.0 - db_employee.job_satisfaction) / 3.0) * 0.06
+        _tenure_stress = min(db_employee.years_at_company / 10.0, 1.0) * 0.035
+        self.stress    = round(min(_sat_stress + _tenure_stress, 0.40), 4)
+
         self.fatigue      = 0.0
         self.motivation   = self.baseline_satisfaction / 4.0
         self.loyalty      = min(db_employee.years_at_company / 10.0, 1.0)

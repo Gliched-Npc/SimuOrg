@@ -14,6 +14,7 @@ class SimulationConfig:
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
     overtime_bonus:         float = 0.0
+    wlb_boost:              float = 0.0  # direct WLB lift (autonomy, flexibility, remote)
 
 
 POLICIES = {
@@ -27,14 +28,16 @@ POLICIES = {
         motivation_decay_rate=0.004,
         shock_factor=0.15,
         stress_gain_rate=0.8,
+        wlb_boost=0.3,   # remote cuts commute/office friction -> real WLB gain
     ),
 
     "flexible_work": SimulationConfig(
-        workload_multiplier=0.85,     # lighter perceived workload
-        motivation_decay_rate=0.002,  # motivation barely decays — people feel respected
-        shock_factor=0.1,             # quits spread less stress — team is resilient
-        stress_gain_rate=0.5,         # stress builds very slowly
+        workload_multiplier=0.85,
+        motivation_decay_rate=0.002,
+        shock_factor=0.1,
+        stress_gain_rate=0.5,
         overtime_bonus=0.0,
+        wlb_boost=0.5,   # schedule autonomy is the strongest WLB driver
     ),
 
     "kpi_pressure": SimulationConfig(
@@ -71,8 +74,8 @@ POLICIES = {
         workload_multiplier=1.4,
         motivation_decay_rate=0.003,  # pay cushions motivation longer
         shock_factor=0.25,
-        stress_gain_rate=3.0,
-        overtime_bonus=2.0,           # strong enough to push satisfaction above baseline early
+        stress_gain_rate=2.0,         # lowered: fair pay means less subjective stress per hour
+        overtime_bonus=2.0,           # dampens stress gain + raises job satisfaction
     ),
 }
 
