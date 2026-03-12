@@ -37,6 +37,13 @@ def _load_calibration():
             }
     return _calibration_cache
 
+
+def clear_calibration_cache():
+    """Invalidate the lazy cache so the next simulation re-reads calibration.json."""
+    global _calibration_cache
+    _calibration_cache = None
+
+
 # All constants resolved lazily via _load_calibration() on first call
 def _c(key, default):
     return _load_calibration().get(key, default)

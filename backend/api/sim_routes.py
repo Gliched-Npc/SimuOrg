@@ -1,17 +1,18 @@
 # backend/api/sim_routes.py
 
+import asyncio
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 from backend.simulation.monte_carlo import run_monte_carlo
 from backend.simulation.policies import SimulationConfig, get_policy, POLICIES
 
-router = APIRouter(prefix="/api/sim",tags=["Simulation"])
+router = APIRouter(prefix="/api/sim", tags=["Simulation"])
 
 
 class SimulationRequest(BaseModel):
     policy_name: str = "baseline"
-    runs: int = Field(default=10,ge=1,le=50)
-    duration_months: int = Field(default=12,ge=1,le=24)
+    runs: int = Field(default=10, ge=1, le=50)
+    duration_months: int = Field(default=12, ge=1, le=24)
 
 
 class CompareRequest(BaseModel):
@@ -27,7 +28,7 @@ def list_policies():
 
 
 @router.post("/run")
-def run_simulation_endpoint(request: SimulationRequest):
+async def run_simulation_endpoint(request: SimulationRequest):
     import os
     from sqlmodel import Session, select
     from backend.database import engine
@@ -49,14 +50,17 @@ def run_simulation_endpoint(request: SimulationRequest):
 
     if request.policy_name not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_name}")
+
     config = get_policy(request.policy_name)
     config.duration_months = request.duration_months
-    results = run_monte_carlo(config, runs=request.runs, policy_name=request.policy_name)
+
+    # Run in a thread pool so the event loop stays free for health-checks / other requests
+    results = await asyncio.to_thread(run_monte_carlo, config, request.runs, request.policy_name)
     return results
 
 
 @router.post("/compare")
-def compare_policies(request: CompareRequest):
+async def compare_policies(request: CompareRequest):
     if request.policy_a not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_a}")
     if request.policy_b not in POLICIES:
@@ -68,10 +72,15 @@ def compare_policies(request: CompareRequest):
     config_b = get_policy(request.policy_b)
     config_b.duration_months = request.duration_months
 
-    results_a = run_monte_carlo(config_a, runs=request.runs, policy_name=request.policy_a)
-    results_b = run_monte_carlo(config_b, runs=request.runs, policy_name=request.policy_b)
+    # Run both MC simulations concurrently in the thread pool.
+    # Previously sequential: total wait = T_a + T_b (~120s for 10-run compare).
+    # Now concurrent:        total wait = max(T_a, T_b) (~60s).
+    results_a, results_b = await asyncio.gather(
+        asyncio.to_thread(run_monte_carlo, config_a, request.runs, request.policy_a),
+        asyncio.to_thread(run_monte_carlo, config_b, request.runs, request.policy_b),
+    )
 
     return {
         "policy_a": results_a,
         "policy_b": results_b,
-    }
+    }

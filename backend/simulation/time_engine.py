@@ -1,6 +1,5 @@
 # backend/simulation/time_engine.py
 
-import random
 import json
 import numpy as np
 from sqlmodel import Session, select
@@ -10,19 +9,37 @@ from backend.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
 from backend.simulation.org_graph import build_org_graph, OrgGraph
 from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.simulation.policies import SimulationConfig, get_policy
-from backend.ml.burnout_estimator import burnout_threshold as burnout_fn  # for new hire burnout_limit
+from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
 
-# Load calibration with fallback defaults
-try:
-    with open("backend/ml/exports/calibration.json") as f:
-        calibration = json.load(f)
-except FileNotFoundError:
-    calibration = {"prob_scale": 1.0, "stress_amplification": 2.0, "monthly_natural_rate": 0.0145}
+# Lazy-loaded calibration cache — same pattern as behavior_engine.py.
+# This guarantees that after a retrain + recalibrate, the very next simulation
+# picks up fresh values without a server restart.
+_engine_calibration_cache = None
 
-STRESS_THRESHOLD      = calibration.get("stress_threshold", 0.5)
-NATURAL_MONTHLY_RATE  = calibration.get("monthly_natural_rate", 0.0145)
-PROB_SCALE            = calibration.get("prob_scale", 0.5424)
-STRESS_AMPLIFICATION  = calibration.get("stress_amplification", 2.0)
+
+def clear_engine_calibration_cache():
+    """Call after calibrate() so the next run_simulation reads fresh values."""
+    global _engine_calibration_cache
+    _engine_calibration_cache = None
+
+
+def _get_calibration():
+    """Lazy-load calibration.json. Re-reads after clear_engine_calibration_cache()."""
+    global _engine_calibration_cache
+    if _engine_calibration_cache is None:
+        try:
+            with open("backend/ml/exports/calibration.json") as f:
+                _engine_calibration_cache = json.load(f)
+        except FileNotFoundError:
+            _engine_calibration_cache = {
+                "prob_scale": 1.0,
+                "stress_amplification": 2.0,
+                "monthly_natural_rate": 0.0145,
+                "stress_threshold": 0.5,
+                "new_hire_monthly_prob": 0.029,
+            }
+    return _engine_calibration_cache
+
 
 
 def load_agents_from_db() -> list[EmployeeAgent]:
@@ -39,9 +56,21 @@ def load_agents_from_db() -> list[EmployeeAgent]:
     return agents
 
 
-def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=None, policy_name: str = "custom") -> dict:
+def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=None, policy_name: str = "custom", seed: int = 42, prob_scale_override: float = None) -> dict:
     if config is None:
         config = SimulationConfig()
+
+    rng = np.random.default_rng(seed)
+
+    # Read fresh calibration on every call (lazy-loaded, invalidated after retrain)
+    cal                = _get_calibration()
+    STRESS_THRESHOLD   = cal.get("stress_threshold", 0.5)
+    NATURAL_MONTHLY_RATE = cal.get("monthly_natural_rate", 0.0145)
+    STRESS_AMPLIFICATION = cal.get("stress_amplification", 2.0)
+    # prob_scale_override lets the calibration loop test different scales without
+    # rewriting calibration.json between runs.
+    _prob_scale = prob_scale_override if prob_scale_override is not None else cal.get("prob_scale", 1.0)
+    _new_hire_cap = cal.get("new_hire_monthly_prob", NATURAL_MONTHLY_RATE * 2.0)
 
     print(f"=== Starting simulation - Policy: {policy_name.upper()}")
     if agents is None:
@@ -107,23 +136,21 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             # derived from real short-tenure employees in calibration, same cap used
             # in mini-sim so prob_scale stays consistent.
             if agent.years_at_company == 0:
-                new_hire_cap = calibration.get("new_hire_monthly_prob",
-                                               NATURAL_MONTHLY_RATE * 2.0)
-                monthly_prob = min(monthly_prob, new_hire_cap)
+                monthly_prob = min(monthly_prob, _new_hire_cap)
 
             excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
             stress_scale   = 1.0 + STRESS_AMPLIFICATION * excess_stress
-            effective_prob = min(1.0, monthly_prob * PROB_SCALE * stress_scale)
+            effective_prob = min(1.0, monthly_prob * _prob_scale * stress_scale)
 
-            if random.random() < effective_prob:
+            if rng.random() < effective_prob:
                 quitting_agents.append(agent)
 
         # Process departures
         for agent in layoff_agents + quitting_agents:
             apply_attrition_shockwave(agent, G, config.shock_factor)
             agent.is_active = False
-            if G.has_node(agent.employee_id):
-                G.remove_node(agent.employee_id)
+            # G.remove_node() intentionally omitted: removing nodes permanently
+            # breaks contagion paths. Inactive agents are skipped by behavior_engine.
 
         # Hiring — employer attractiveness model.
         # Companies under stress struggle to attract candidates. Calm workplaces
@@ -139,42 +166,10 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
             filled_this_month = 0
             for quitter in list(quitting_agents):
-                if random.random() < fill_prob:
+                if rng.random() < fill_prob:
                     max_id += 1
-                    new_agent = EmployeeAgent.__new__(EmployeeAgent)
-                    new_agent.employee_id                = max_id
-                    new_agent.department                 = quitter.department
-                    new_agent.job_role                   = quitter.job_role
-                    new_agent.job_level                  = quitter.job_level
-                    new_agent.manager_id                 = quitter.manager_id
-                    new_agent.years_at_company           = 0
-                    new_agent.total_working_years        = 0
-                    new_agent.num_companies_worked       = 1.0
-                    new_agent.monthly_income             = quitter.monthly_income
-                    new_agent.job_satisfaction           = 3.0
-                    new_agent.work_life_balance          = 3.0
-                    new_agent.environment_satisfaction   = 3.0
-                    new_agent.baseline_satisfaction      = 3.0
-                    new_agent.baseline_wlb               = 3.0
-                    new_agent.job_involvement            = 3
-                    new_agent.performance_rating         = 3
-                    new_agent.stress                     = 0.1
-                    new_agent.fatigue                    = 0.0
-                    new_agent.motivation                 = 0.75
-                    new_agent.loyalty                    = 0.1
-                    new_agent.productivity               = 1.0
-                    new_agent.is_active                  = True
-                    new_agent.burnout_limit              = burnout_fn(quitter.job_level, 0)
-                    new_agent.years_since_last_promotion = 0
-                    new_agent.years_with_curr_manager    = 0
-                    new_agent.stock_option_level         = 0
-                    new_agent.age                        = random.randint(22, 35)
-                    new_agent.distance_from_home         = quitter.distance_from_home
-                    new_agent.percent_salary_hike        = 15
-                    new_agent.marital_status             = quitter.marital_status
-                    new_agent.overtime                   = quitter.overtime
-                    new_agent.business_travel            = quitter.business_travel
-                    new_agent.years_in_current_role      = 0
+                    # Spawn via from_template — goes through __init__, no attribute misses
+                    new_agent = EmployeeAgent.from_template(quitter, max_id, rng)
 
                     agents.append(new_agent)
                     G.add_node(new_agent.employee_id, agent=new_agent)

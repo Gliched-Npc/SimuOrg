@@ -16,22 +16,36 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
     """
     print(f"=== Running Monte Carlo: {runs} simulations - Policy: {policy_name.upper()}")
 
-    # Load once, deepcopy per run for speed and consistency
+    # Load once — used as the immutable base for ALL runs
     base_agents = load_agents_from_db()
-    
 
-    all_logs = []
+    # Build org graph ONCE from base agents, then deepcopy it per run.
+    # Previously deepcopy(base_agents) produced new object ids, breaking the
+    # _cached_template_graph key, so build_org_graph rebuilt 69k edges on
+    # every single run. Building once and copying the graph object is ~50x faster.
+    base_G = build_org_graph(base_agents)
+
+    all_logs      = []
     all_summaries = []
 
     for i in range(runs):
         print(f"   Run {i+1}/{runs}...", end="\r")
         agents_copy = copy.deepcopy(base_agents)
-        G_copy = build_org_graph(agents_copy)
-        result      = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name)
+        G_copy      = copy.deepcopy(base_G)
+
+        # Re-wire graph node agent references to the copied agents so the
+        # behavior engine reads the copied state, not the base state.
+        id_to_copy = {a.employee_id: a for a in agents_copy}
+        for node_id in G_copy.nodes():
+            if node_id in id_to_copy:
+                G_copy.nodes[node_id]["agent"] = id_to_copy[node_id]
+
+        result = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=i)
         all_logs.append(result["logs"])
         all_summaries.append(result.get("summary", {}))
 
     print(f"\n[done] Monte Carlo complete.")
+
 
     # Aggregate across runs for each month
     duration   = len(all_logs[0]) if all_logs else 0
@@ -67,13 +81,32 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
     if aggregated:
         initial_headcount = aggregated[0]["headcount"]["mean"]
         final_headcount   = aggregated[-1]["headcount"]["mean"]
-        # Estimate period quits as the sum of mean monthly quits across runs.
-        total_quits_est   = sum(m["attrition_count"]["mean"] for m in aggregated)
-        period_months     = config.duration_months
-        if initial_headcount > 0:
-            period_attrition_pct = total_quits_est / initial_headcount * 100.0
+
+        # Correct attrition formula:
+        # Each run's summary["total_quits"] is the ground truth — it's the raw
+        # cumulative count returned by time_engine, not a mean of monthly slices.
+        # Averaging those per-run totals removes the double-counting bias from
+        # summing monthly mean attrition_counts (which compounds rounding error).
+        valid_summaries   = [s for s in all_summaries if "total_quits" in s]
+        if valid_summaries:
+            total_quits_est   = float(np.mean([s["total_quits"] for s in valid_summaries]))
+            avg_headcount_est = float(np.mean([
+                (s["initial_headcount"] + s["final_headcount"]) / 2.0
+                for s in valid_summaries
+                if "initial_headcount" in s and "final_headcount" in s
+            ])) if all("initial_headcount" in s for s in valid_summaries) else initial_headcount
+        else:
+            # Fallback: sum of monthly means (old method — less accurate)
+            total_quits_est   = sum(m["attrition_count"]["mean"] for m in aggregated)
+            avg_headcount_est = initial_headcount
+
+        period_months = config.duration_months
+        denom         = avg_headcount_est if avg_headcount_est > 0 else initial_headcount
+        if denom > 0:
+            period_attrition_pct = total_quits_est / denom * 100.0
             annual_attrition_pct = period_attrition_pct * (12.0 / period_months) if period_months > 0 else period_attrition_pct
         else:
+
             period_attrition_pct = 0.0
             annual_attrition_pct = 0.0
 

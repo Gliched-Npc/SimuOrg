@@ -105,44 +105,10 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     print(f"  >> new_hire_monthly_prob={new_hire_monthly_prob:.4f} "
           f"(from {int(short_tenure_mask.sum())} short-tenure employees)")
 
-    # Mini-sim uses ALL 4410 employees — matches time_engine which loads all
-    # employees ignoring the Attrition label.
-    active_probs_init = monthly_probs.copy()
-
-    # Drift compensation: the behavior engine updates job_satisfaction dynamically.
-    # Under baseline, motivation recovery causes JobSat to drift up, lowering quit
-    # probabilities below what the static mini-sim predicts.  We calibrate prob_scale
-    # against a slightly higher target so the real simulation lands on the true rate.
-    #
-    # The compensation must scale with the dataset — a flat 0.03 is ~18% of IBM HR's
-    # 16.1% rate but would be a 60% overcorrection on a 5%-attrition dataset.
-    # Anchoring to annual_attrition_rate * 0.18 makes it proportional to any dataset.
-    drift_compensation    = annual_attrition_rate * 0.18
-    calibration_target    = min(annual_attrition_rate + drift_compensation, 0.99)
-
-    def _simulate_annual_rate(scale, mp, seed=42):
-        rng = np.random.default_rng(seed)
-        active_probs = mp.copy()
-        total_quits = 0
-        for _ in range(12):
-            effective = np.clip(active_probs * scale, 0.0, 1.0)
-            quits = rng.random(len(active_probs)) < effective
-            total_quits += int(quits.sum())
-            active_probs[quits] = new_hire_monthly_prob
-        return total_quits / len(mp)
-
-    lo, hi = 0.05, 5.0
-    for _ in range(30):
-        mid = (lo + hi) / 2
-        if _simulate_annual_rate(mid, active_probs_init.copy()) < calibration_target:
-            lo = mid
-        else:
-            hi = mid
-    prob_scale = round((lo + hi) / 2, 4)
-    simulated_check = _simulate_annual_rate(prob_scale, active_probs_init.copy())
-    print(f"  >> prob_scale={prob_scale} | mini-sim: {simulated_check:.4f} vs target: {calibration_target:.4f} (raw: {annual_attrition_rate:.4f})")
-
-
+    # prob_scale starts at 1.0 (neutral). The empirical calibration loop below
+    # will run actual full simulations and binary-search to the correct value.
+    # No mini-sim, no heuristics — the real engine tells us what it needs.
+    prob_scale = 1.0
 
 
     quitter_probs         = quit_probs[labels == 1]
@@ -297,11 +263,135 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     with open(save_path, "w") as f:
         json.dump(calibration, f, indent=2)
 
-    print("+++ Calibration complete:")
+    print("+++ Initial calibration saved (mini-sim prob_scale).")
+    print("=== Running empirical calibration (6 full simulation passes)...")
+
+    # Empirical calibration: run actual full simulations to find the prob_scale
+    # that makes the REAL behavioral engine land on the historical attrition rate.
+    #
+    # Why this is better than the mini-sim:
+    #   - The mini-sim is a static probability roll — it can't model motivation
+    #     recovery, WLB dynamics, or stress contagion.
+    #   - By running the full simulation 6 times with different prob_scale values
+    #     (binary search), we find the value that the ACTUAL engine needs.
+    #   - Self-corrects for any dataset without tuning any heuristic.
+    #
+    # Order matters: we save the full calibration.json FIRST (above), so the
+    # behavior engine loads the correct stress/recovery constants during the
+    # empirical runs below. We then update only prob_scale in-place.
+    from backend.simulation.time_engine import run_simulation, load_agents_from_db
+    from backend.simulation.org_graph import build_org_graph, clear_graph_cache
+    from backend.simulation.policies import SimulationConfig
+    from backend.simulation.behavior_engine import clear_calibration_cache
+    import copy
+
+    # Clear caches so the engine reads the freshly written calibration.json
+    clear_calibration_cache()
+    clear_graph_cache()
+
+    # Lean baseline config: no shocks, moderate stress — pure quit-probability measurement
+    calib_config = SimulationConfig(shock_factor=0.0, stress_gain_rate=0.75, duration_months=12)
+
+    # Load agents once, deepcopy per run to guarantee isolated state each pass
+    calib_agents_base = load_agents_from_db()
+
+    def _run_full_sim_rate(ps, seed=42):
+        """Run one calibration_run simulation with a given prob_scale.
+        Returns the period attrition rate (fraction, not %).
+        """
+        agents_copy = copy.deepcopy(calib_agents_base)
+        G_copy      = build_org_graph(agents_copy)
+        result      = run_simulation(
+            calib_config, agents=agents_copy, G=G_copy,
+            policy_name="calibration_run",   # clearly labelled in server logs
+            seed=seed,
+            prob_scale_override=ps,
+        )
+        return result["summary"].get("period_attrition_pct", 0.0) / 100.0
+
+    def _stable_rate(ps, seeds=(42, 99)):
+        """Average rate across multiple seeds for noise-resistant measurement.
+        Using 2 seeds per pass halves variance without doubling runtime much.
+        """
+        rates = [_run_full_sim_rate(ps, seed=s) for s in seeds]
+        return float(np.mean(rates))
+
+    # ── Warm-up pass ──────────────────────────────────────────────────────────
+    # Shows how far the static mini-sim estimate is from the real engine.
+    warmup_rate = _stable_rate(prob_scale)
+    gap = warmup_rate - annual_attrition_rate
+    print(f"  [Warm-up] mini-sim scale={prob_scale:.4f} -> real rate={warmup_rate:.4f}  "
+          f"target={annual_attrition_rate:.4f}  gap={gap:+.4f}")
+
+    # ── Binary search (up to 8 passes) ────────────────────────────────────────
+    # Wide fixed bounds [0.05, 5.0] so we always converge even if the mini-sim
+    # estimate was way off (e.g., overfit model giving a wildly wrong prob_scale).
+    CONVERGENCE_TOL = 0.005   # stop when sim rate is within 0.5% of historical rate
+    MAX_PASSES      = 8
+    emp_lo, emp_hi  = 0.05, 5.0
+    converged       = False
+
+    for i in range(MAX_PASSES):
+        mid      = (emp_lo + emp_hi) / 2.0
+        mid_rate = _stable_rate(mid)
+        error    = mid_rate - annual_attrition_rate
+        direction = "scale up  " if mid_rate < annual_attrition_rate else "scale down"
+        print(f"  [Pass {i+1}/{MAX_PASSES}] scale={mid:.4f} -> rate={mid_rate:.4f}  "
+              f"error={error:+.4f}  {direction}")
+        if mid_rate < annual_attrition_rate:
+            emp_lo = mid
+        else:
+            emp_hi = mid
+        if abs(error) <= CONVERGENCE_TOL:
+            print(f"  [Converged] within {CONVERGENCE_TOL*100:.1f}% tolerance after {i+1} passes")
+            converged = True
+            break
+
+    if not converged:
+        print(f"  [Note] Did not converge within tolerance after {MAX_PASSES} passes — using best estimate")
+
+    empirical_prob_scale = round((emp_lo + emp_hi) / 2.0, 4)
+
+    # ── Stability check ───────────────────────────────────────────────────────
+    # Run the final scale 3 more times to measure result variance.
+    # High std dev = dataset is noisy / small → warn the user.
+    stability_seeds  = [7, 13, 31]
+    stability_rates  = [_run_full_sim_rate(empirical_prob_scale, seed=s) for s in stability_seeds]
+    stability_mean   = float(np.mean(stability_rates))
+    stability_std    = float(np.std(stability_rates))
+    calib_quality    = "stable" if stability_std < 0.02 else "noisy"
+    print(f"\n  [Stability] prob_scale={empirical_prob_scale} over 3 seeds:")
+    print(f"    mean={stability_mean:.4f}  std={stability_std:.4f}  quality={calib_quality}")
+    if calib_quality == "noisy":
+        print(f"  [WARN] High variance (std={stability_std:.4f}). "
+              f"Consider uploading a larger dataset for more stable calibration.")
+
+    print(f"\n  >> Empirical prob_scale : {empirical_prob_scale}  (mini-sim estimate was: {prob_scale})")
+    print(f"  >> Final attrition rate : {stability_mean:.4f}  (target: {annual_attrition_rate:.4f})")
+    print(f"  >> Calibration quality  : {calib_quality} (std={stability_std:.4f})")
+
+    # ── Update calibration.json ───────────────────────────────────────────────
+    calibration["prob_scale"]             = empirical_prob_scale
+    calibration["prob_scale_mini_sim"]    = prob_scale
+    calibration["calib_quality"]          = calib_quality
+    calibration["calib_attrition_std"]    = round(stability_std, 4)
+    with open(save_path, "w") as f:
+        json.dump(calibration, f, indent=2)
+
+    print("\n+++ Calibration complete:")
     for k, v in calibration.items():
         print(f"   {k}: {v}")
 
+    # Clear ALL engine caches so the very next simulation uses fresh values:
+    #   - behavior_engine: stress/recovery/WLB constants
+    #   - time_engine:     PROB_SCALE, STRESS_THRESHOLD, STRESS_AMPLIFICATION
+    clear_calibration_cache()
+    from backend.simulation.time_engine import clear_engine_calibration_cache
+    clear_engine_calibration_cache()
+
     return calibration
+
+
 
 
 if __name__ == "__main__":

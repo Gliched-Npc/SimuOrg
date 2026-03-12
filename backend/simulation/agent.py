@@ -142,7 +142,7 @@ class EmployeeAgent:
             "distance_from_home":         self.distance_from_home,
             "percent_salary_hike":        self.percent_salary_hike,
             "years_in_current_role":      self.years_in_current_role,
-            "marital_status":             self.marital_status or random.choice(["Single", "Married", "Divorced"]),
+            "marital_status":             self.marital_status or "Single",  # deterministic fallback
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
             # Categorical — needed so engineer_features can create *_encoded columns
@@ -162,6 +162,51 @@ class EmployeeAgent:
             work_life_balance=self.work_life_balance,
             workload_multiplier=workload_multiplier
         )
+
+    @classmethod
+    def from_template(cls, template_agent, new_id: int, rng):
+        """
+        Creates a new hire agent to replace a departed employee.
+        Inherits role/department but resets tenure, stress, etc.
+        """
+        from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
+        # Create a blank instance bypassing __init__ (which expects an ORM model)
+        new_agent = cls.__new__(cls)
+        new_agent.employee_id                = new_id
+        new_agent.department                 = template_agent.department
+        new_agent.job_role                   = template_agent.job_role
+        new_agent.job_level                  = template_agent.job_level
+        new_agent.manager_id                 = template_agent.manager_id
+        new_agent.years_at_company           = 0
+        new_agent.total_working_years        = 0
+        new_agent.num_companies_worked       = 1.0
+        new_agent.monthly_income             = template_agent.monthly_income
+        new_agent.job_satisfaction           = 3.0
+        new_agent.work_life_balance          = 3.0
+        new_agent.environment_satisfaction   = 3.0
+        new_agent.baseline_satisfaction      = 3.0
+        new_agent.baseline_wlb               = 3.0
+        new_agent.job_involvement            = 3
+        new_agent.performance_rating         = 3
+        new_agent.stress                     = 0.1
+        new_agent.fatigue                    = 0.0
+        new_agent.motivation                 = 0.75
+        new_agent.loyalty                    = 0.1
+        new_agent.productivity               = 1.0
+        new_agent.is_active                  = True
+        new_agent.burnout_limit              = burnout_fn(template_agent.job_level, 0)
+        new_agent.years_since_last_promotion = 0
+        new_agent.years_with_curr_manager    = 0
+        new_agent.stock_option_level         = 0
+        new_agent.age                        = rng.integers(22, 36)
+        new_agent.distance_from_home         = template_agent.distance_from_home
+        new_agent.percent_salary_hike        = 15
+        new_agent.marital_status             = template_agent.marital_status
+        new_agent.overtime                   = template_agent.overtime
+        new_agent.business_travel            = template_agent.business_travel
+        new_agent.years_in_current_role      = 0
+        return new_agent
+
 
     def __repr__(self):
         return (
