@@ -1,0 +1,15 @@
+{
+  "auc_roc": 0.952,
+  "cv_auc_mean": 0.9512,
+  "cv_auc_std": 0.0112,
+  "test_accuracy": 0.8968,
+  "train_accuracy": 0.9471,
+  "features_used": 19,
+  "bonus_features": [
+    "department_encoded",
+    "job_role_encoded"
+  ],
+  "signal_strength": "strong",
+  "simulation_reliable": true,
+  "recommendation": "Simulation results are reliable."
+}

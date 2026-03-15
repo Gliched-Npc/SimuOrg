@@ -138,6 +138,15 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             if agent.years_at_company == 0:
                 monthly_prob = min(monthly_prob, _new_hire_cap)
 
+            # ── Survival discount (fixes month-1 initialization spike) ──
+            # Existing employees have implicitly survived years_at_company * 12 monthly
+            # quit rolls that were never simulated.  A 10-yr veteran's realized
+            # monthly probability should reflect that survival.  New hires (years=0)
+            # get exp(0) = 1.0 (unaffected).
+            if agent.years_at_company > 0:
+                survival_discount = np.exp(-monthly_prob * 12 * agent.years_at_company)
+                monthly_prob *= survival_discount
+
             excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
             stress_scale   = 1.0 + STRESS_AMPLIFICATION * excess_stress
             effective_prob = min(1.0, monthly_prob * _prob_scale * stress_scale)
@@ -165,11 +174,31 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             fill_prob       = max(0.50, 0.95 - prev_avg_stress * 0.50)
 
             filled_this_month = 0
+            # Gather department-level satisfaction stats for realistic new hire init
+            dept_agents: dict[str, list[EmployeeAgent]] = {}
+            for a in agents:
+                if a.is_active:
+                    dept_agents.setdefault(a.department, []).append(a)
+
             for quitter in list(quitting_agents):
                 if rng.random() < fill_prob:
                     max_id += 1
                     # Spawn via from_template — goes through __init__, no attribute misses
                     new_agent = EmployeeAgent.from_template(quitter, max_id, rng)
+
+                    # ── Sample satisfaction from department peers (fixes JobSat drift) ──
+                    # Hardcoded 3.0 caused new hires to inflate avg satisfaction under
+                    # pressure. Drawing from existing department distribution ensures
+                    # replacements inherit the current departmental climate.
+                    dept_peers = dept_agents.get(quitter.department, [])
+                    if dept_peers:
+                        peer = rng.choice(dept_peers)
+                        new_agent.job_satisfaction         = peer.job_satisfaction
+                        new_agent.work_life_balance        = peer.work_life_balance
+                        new_agent.environment_satisfaction = peer.environment_satisfaction
+                        new_agent.baseline_satisfaction    = peer.baseline_satisfaction
+                        new_agent.baseline_wlb             = peer.baseline_wlb
+                        new_agent.motivation               = peer.motivation
 
                     agents.append(new_agent)
                     G.add_node(new_agent.employee_id, agent=new_agent)
@@ -279,6 +308,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
 
 if __name__ == "__main__":
-    policy  = "flexible_work"
+    policy  = "baseline"
     config  = get_policy(policy)
     results = run_simulation(config, policy_name=policy)  

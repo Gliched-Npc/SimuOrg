@@ -44,7 +44,7 @@ POLICIES = {
         workload_multiplier=1.3,
         motivation_decay_rate=0.012,
         shock_factor=0.25,
-        stress_gain_rate=3.5,       # crosses 0.44 threshold by month 4-5
+        stress_gain_rate=2.5,       # gradual burnout — crosses threshold by month 5-6
     ),
 
     "hiring_freeze": SimulationConfig(

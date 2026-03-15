@@ -70,7 +70,6 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
         "years_in_current_role":      getattr(emp, "years_in_current_role", 0) or 0,
         "marital_status":             emp.marital_status,
         "overtime":                   getattr(emp, "overtime", 0) or 0,
-        "business_travel":            getattr(emp, "business_travel", 0) or 0,
         # Needed so engineer_features can create department_encoded / job_role_encoded
         "department":                 getattr(emp, "department", None),
         "job_role":                   getattr(emp, "job_role", None),
@@ -79,31 +78,36 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
 
     df_all = pd.DataFrame(records)
     df_all = engineer_features(df_all, encoders=saved_encoders)
-
-    # Single batch call — massively faster than N individual predict_proba calls
-    quit_probs     = quit_model.predict_proba(df_all[saved_features])[:, 1]
-    burnout_limits = np.array([
-        burnout_threshold(emp.job_level, emp.total_working_years) for emp in employees
-    ])
-    labels = (df_all["attrition"] == "Yes").astype(int).values
-
-
-    attrition_counts = sum(1 for emp in employees if emp.attrition == "Yes")
-    total            = len(employees)
+    
+    # Single batch call — massively faster than N individual predict_proba calls    
+    quit_probs     = quit_model.predict_proba(df_all[saved_features])[:, 1] 
+    burnout_limits = np.array([ 
+        burnout_threshold(emp.job_level, emp.total_working_years) for emp in employees  
+    ])  
+    labels = (df_all["attrition"] == "Yes").astype(int).values  
+    
+    
+    attrition_counts = sum(1 for emp in employees if emp.attrition == "Yes")    
+    total            = len(employees)   
     annual_attrition_rate = attrition_counts / total if attrition_counts > 0 else 0.15
 
     monthly_natural_rate  = 1 - (1 - annual_attrition_rate) ** (1 / 12)
     monthly_probs = 1 - (1 - quit_probs) ** (1 / 12)
 
     # New hire probability — model score for a fresh hire (years_at_company=0).
-    # Use mean of short-tenure employees (<=1yr) as proxy.
+    # Use 10th percentile of short-tenure employees (<=1yr) instead of mean.
+    # The mean is ~29% because the cohort is dominated by genuinely unhappy employees
+    # the model correctly flags as at-risk. The 10th percentile represents the
+    # lowest-risk new hires — a realistic cap for replacement employees.
     short_tenure_mask = np.array([emp.years_at_company <= 1 for emp in employees])
     if short_tenure_mask.sum() >= 10:
-        new_hire_monthly_prob = float(np.mean(monthly_probs[short_tenure_mask]))
+        new_hire_monthly_prob = float(np.percentile(monthly_probs[short_tenure_mask], 10))
     else:
         new_hire_monthly_prob = monthly_natural_rate * 2.0
+
+    new_hire_monthly_prob = max(new_hire_monthly_prob,monthly_natural_rate)
     print(f"  >> new_hire_monthly_prob={new_hire_monthly_prob:.4f} "
-          f"(from {int(short_tenure_mask.sum())} short-tenure employees)")
+          f"(10th percentile of {int(short_tenure_mask.sum())} short-tenure employees)")
 
     # prob_scale starts at 1.0 (neutral). The empirical calibration loop below
     # will run actual full simulations and binary-search to the correct value.
@@ -162,10 +166,25 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     shockwave_loyalty_factor = round(0.1 * (1 - avg_loyalty * 0.2), 4)
 
     # ── Data-driven stress threshold ──
-    # Use the actual attrition rate as the percentile -> the stress threshold
-    # corresponds to the burnout tolerance of employees in the "attrition risk zone"
-    attrition_percentile = annual_attrition_rate * 100  # e.g., 16.1
-    stress_threshold     = round(float(np.percentile(burnout_limits, attrition_percentile)), 4)
+    # Derived from REACHABLE stress levels, not burnout limits.
+    # Burnout limits range 0.30–0.85 — baseline stress peaks at 0.06–0.09.
+    # Using np.percentile(burnout_limits, ...) gave 0.44 — unreachable under
+    # normal conditions, so the amplifier never fired.
+    # Fix: compute each employee's initial stress (same formula as agent.py __init__)
+    # and use the (100 - attrition_pct) percentile so the top ~16% most-stressed
+    # employees are above threshold at baseline.
+    initial_stresses = np.array([
+        min(
+            max(0.0, (4.0 - emp.job_satisfaction) / 3.0) * 0.06
+            + min(emp.years_at_company / 10.0, 1.0) * 0.035,
+            0.40
+        )
+        for emp in employees
+    ])
+    stress_pct       = max(1.0, 100.0 - annual_attrition_rate * 100)  # e.g., 83.9
+    stress_threshold = round(float(np.percentile(initial_stresses, stress_pct)), 4)
+    print(f"  >> stress_threshold={stress_threshold:.4f} "
+          f"(pct={stress_pct:.1f} of initial stress distribution)")
 
     # ── Data-driven behavior engine constants ──
     # These replace all hardcoded floats in behavior_engine.py.
@@ -235,6 +254,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
         "annual_attrition_rate":    round(annual_attrition_rate, 4),
         "monthly_natural_rate":     round(monthly_natural_rate, 4),
         "stress_gain_rate":         stress_gain_rate,
+        "behavior_stress_gain_rate": stress_gain_rate,  # explicit key for behavior_engine.py
         "recovery_rate":            recovery_rate,
         "natural_scale":            1,
         "shockwave_stress_factor":  shockwave_stress_factor,
@@ -385,9 +405,12 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     # Clear ALL engine caches so the very next simulation uses fresh values:
     #   - behavior_engine: stress/recovery/WLB constants
     #   - time_engine:     PROB_SCALE, STRESS_THRESHOLD, STRESS_AMPLIFICATION
+    #   - agent:           quit model weights (prevents stale predictions)
     clear_calibration_cache()
     from backend.simulation.time_engine import clear_engine_calibration_cache
     clear_engine_calibration_cache()
+    from backend.simulation.agent import clear_quit_model_cache
+    clear_quit_model_cache()
 
     return calibration
 

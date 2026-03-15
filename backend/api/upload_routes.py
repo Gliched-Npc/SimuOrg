@@ -8,6 +8,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from backend.database import init_db
 from backend.schema import REQUIRED_COLUMNS, normalize_dataframe, build_schema_report
 from backend.upload import clean_dataframe, ingest_from_dataframe, validate_data_quality
+from backend.quality_checker import check_data_quality
 from backend.ml.attrition_model import train_attrition_model
 from backend.ml.burnout_estimator import train_burnout_estimator
 from backend.ml.calibration import calibrate
@@ -21,6 +22,15 @@ router = APIRouter(prefix="/api/upload", tags=["Upload"])
 # Status: "training" → "calibrating" → "done" | "failed"
 _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
+
+# ── Persistent data quality warnings (#19) ──
+# Stored after upload so simulation endpoints can attach them to results.
+_last_data_issues: list[dict] = []
+
+
+def get_data_issues() -> list[dict]:
+    """Return the quality issues from the most recent upload."""
+    return _last_data_issues
 
 
 def _background_train_and_calibrate(job_id: str):
@@ -62,8 +72,62 @@ def _background_train_and_calibrate(job_id: str):
         _set(status="failed", error=str(exc))
 
 
+def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
+    """Parse CSV bytes, normalize columns and return (df, overtime_was_present)."""
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    df, overtime_was_present = normalize_dataframe(df)
+    missing_required = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing_required:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required columns: {missing_required}. "
+                   f"These are the minimum columns needed to run a simulation.",
+        )
+    return df, overtime_was_present
+
+
+# ── Req #17: Pre-ingest validation endpoint ──────────────────────────────────
+
+@router.post("/validate")
+async def validate_dataset(file: UploadFile = File(...)):
+    """
+    Run quality checks on the uploaded CSV WITHOUT ingesting into the database.
+    Returns issues with severity tiers and a cleaning report so the client
+    can decide to fix-and-reupload or proceed-anyway.
+    """
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided.")
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are accepted.")
+
+    contents = await file.read()
+    try:
+        df, overtime_was_present = _read_and_normalize(contents)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
+
+    schema_report = build_schema_report(df, overtime_was_present)
+    df, duplicates_removed = clean_dataframe(df)
+    issues = check_data_quality(df, duplicates_removed)
+
+    return {
+        "status":          "validated",
+        "rows":            len(df),
+        "duplicates_removed": duplicates_removed,
+        "schema_report":   schema_report,
+        "issues":          issues,
+        "message":         "Validation complete. Review issues, then POST to /api/upload/dataset to ingest.",
+    }
+
+
+# ── Main upload endpoint (unchanged contract, enriched response) ─────────────
+
 @router.post("/dataset")
 async def upload_dataset(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+    global _last_data_issues
+
     # 1. Validate file
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file provided. Please select a CSV file to upload.")
@@ -73,37 +137,27 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     # 2. Read CSV
     contents = await file.read()
     try:
-        df = pd.read_csv(io.BytesIO(contents))
+        df, overtime_was_present = _read_and_normalize(contents)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
 
-    # 3. Normalize
-    df, overtime_was_present = normalize_dataframe(df)
-
-    # 4. Validate required columns
-    missing_required = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-    if missing_required:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing required columns: {missing_required}. "
-                   f"These are the minimum columns needed to run a simulation."
-        )
-
-    # 5–6. Schema report + clean
+    # 3. Schema report + clean
     schema_report = build_schema_report(df, overtime_was_present)
     df, duplicates_removed = clean_dataframe(df)
     quality = validate_data_quality(df, duplicates_removed=duplicates_removed)
+    issues = check_data_quality(df, duplicates_removed)
+    _last_data_issues = issues  # persist for sim_routes (#19)
 
-    # 7. Ingest into DB (fast — no ML yet)
+    # 4. Ingest into DB (fast — no ML yet)
     init_db()
     try:
         result = ingest_from_dataframe(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
-    # 8. Kick off training + calibration in a background thread.
-    # This prevents the HTTP request from blocking for 90-120 seconds.
-    # The client should poll GET /api/upload/status/{job_id} to track progress.
+    # 5. Kick off training + calibration in a background thread.
     job_id = str(uuid.uuid4())
     with _JOBS_LOCK:
         _JOBS[job_id] = {"status": "queued"}
@@ -119,6 +173,7 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
         "poll_url":     f"/api/upload/status/{job_id}",
         "message":      "Dataset ingested. Training and calibration running in background. Poll poll_url for status.",
         "warnings":     quality["warnings"] or None,
+        "issues":       issues,
         "schema_report": schema_report,
     }
 
@@ -134,4 +189,3 @@ def get_training_status(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
     return {"job_id": job_id, **job}
-

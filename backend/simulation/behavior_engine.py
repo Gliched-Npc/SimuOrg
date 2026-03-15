@@ -99,8 +99,6 @@ def update_agent_state(agent: EmployeeAgent,
     WLB_DROP_RATE          = _c("wlb_drop_rate", 0.15)
     WLB_RECOVERY_RATE      = _c("wlb_recovery_rate", 0.1)
     BURNOUT_PROD_PENALTY   = _c("burnout_productivity_penalty", 0.97)
-    SHOCKWAVE_STRESS_FACTOR  = _c("shockwave_stress_factor", 0.3)
-    SHOCKWAVE_LOYALTY_FACTOR = _c("shockwave_loyalty_factor", 0.1)
 
     # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)

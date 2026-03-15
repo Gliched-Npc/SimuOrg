@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from backend.simulation.monte_carlo import run_monte_carlo
 from backend.simulation.policies import SimulationConfig, get_policy, POLICIES
+from backend.api.upload_routes import get_data_issues
 
 router = APIRouter(prefix="/api/sim", tags=["Simulation"])
 
@@ -56,6 +57,12 @@ async def run_simulation_endpoint(request: SimulationRequest):
 
     # Run in a thread pool so the event loop stays free for health-checks / other requests
     results = await asyncio.to_thread(run_monte_carlo, config, request.runs, request.policy_name)
+
+    # Req #19: attach persistent data quality warnings if any
+    data_issues = get_data_issues()
+    if data_issues:
+        results["data_warnings"] = data_issues
+
     return results
 
 
@@ -83,4 +90,5 @@ async def compare_policies(request: CompareRequest):
     return {
         "policy_a": results_a,
         "policy_b": results_b,
+        "data_warnings": get_data_issues() or None,
     }

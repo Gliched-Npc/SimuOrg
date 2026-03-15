@@ -68,8 +68,9 @@ def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
     """
     df['stagnation_score']       = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
     df['satisfaction_composite'] = (
-        df['job_satisfaction'] + df['work_life_balance'] + df['environment_satisfaction']
-    ) / 3
+        df['job_satisfaction'] + df['work_life_balance']
+        + df['environment_satisfaction'] + df['job_involvement']
+    ) / 4
     df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
     df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 
@@ -412,7 +413,12 @@ def train_attrition_model():
         },
         "backend/ml/exports/quit_probability.pkl"
     )
+    # Save quality report as JSON for the /api/ml/metrics endpoint
+    import json as _json
+    with open("backend/ml/exports/quality_report.json", "w") as _f:
+        _json.dump(quality_report, _f, indent=2)
     print("[done] Model saved to backend/ml/exports/quit_probability.pkl")
+    print("[done] Quality report saved to backend/ml/exports/quality_report.json")
     return quality_report
 
 

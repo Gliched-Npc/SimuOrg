@@ -186,7 +186,7 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 manager_id                 = mgr_id,
                 simulation_id              = "master",
                 age                        = int(row['Age']),
-                gender                     = row['Gender'],
+                gender                     = row.get('Gender', 'Unknown'),
                 monthly_income             = int(row['MonthlyIncome']),
                 years_at_company           = int(row['YearsAtCompany']),
                 total_working_years        = float(row['TotalWorkingYears']),
@@ -214,9 +214,8 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
 
     with Session(engine) as session:
         session.exec(text("TRUNCATE TABLE employee RESTART IDENTITY CASCADE"))
-        session.commit()
         session.add_all(employees)
-        session.commit()
+        session.commit()  # atomic: truncate + insert succeed or fail together
 
     print(f"[done] {len(employees)} employees ingested. Skipped: {skipped}")
     return {"ingested": len(employees), "skipped": skipped}

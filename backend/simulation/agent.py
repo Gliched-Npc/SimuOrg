@@ -64,6 +64,13 @@ def _quit_features():  return _get_quit_model()["features"]
 def _quit_encoders():  return _get_quit_model()["label_encoders"]
 
 
+def clear_quit_model_cache():
+    """Reset the cached quit model so the next call to _get_quit_model() re-reads from disk.
+    Must be called after retraining/recalibration to prevent stale predictions."""
+    global _quit_model_cache
+    _quit_model_cache = None
+
+
 
 class EmployeeAgent:
     def __init__(self, db_employee):
@@ -91,9 +98,8 @@ class EmployeeAgent:
 
         self.years_in_current_role      = getattr(db_employee, "years_in_current_role", 0) or 0
 
-        # Optional — only present if dataset had OverTime / BusinessTravel column
+        # Optional — only present if dataset had OverTime column
         self.overtime = getattr(db_employee, "overtime", 0) or 0
-        self.business_travel = getattr(db_employee, "business_travel", 0) or 0
 
         # Simulation state
         self.baseline_satisfaction = db_employee.job_satisfaction
@@ -142,7 +148,6 @@ class EmployeeAgent:
             "distance_from_home":         self.distance_from_home,
             "percent_salary_hike":        self.percent_salary_hike,
             "years_in_current_role":      self.years_in_current_role,
-            "marital_status":             self.marital_status or "Single",  # deterministic fallback
             # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
             # Categorical — needed so engineer_features can create *_encoded columns
@@ -201,9 +206,7 @@ class EmployeeAgent:
         new_agent.age                        = rng.integers(22, 36)
         new_agent.distance_from_home         = template_agent.distance_from_home
         new_agent.percent_salary_hike        = 15
-        new_agent.marital_status             = template_agent.marital_status
         new_agent.overtime                   = template_agent.overtime
-        new_agent.business_travel            = template_agent.business_travel
         new_agent.years_in_current_role      = 0
         return new_agent
 
