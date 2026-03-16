@@ -78,17 +78,17 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
 
     df_all = pd.DataFrame(records)
     df_all = engineer_features(df_all, encoders=saved_encoders)
-    
-    # Single batch call — massively faster than N individual predict_proba calls    
-    quit_probs     = quit_model.predict_proba(df_all[saved_features])[:, 1] 
-    burnout_limits = np.array([ 
-        burnout_threshold(emp.job_level, emp.total_working_years) for emp in employees  
-    ])  
-    labels = (df_all["attrition"] == "Yes").astype(int).values  
-    
-    
-    attrition_counts = sum(1 for emp in employees if emp.attrition == "Yes")    
-    total            = len(employees)   
+
+    # Single batch call — massively faster than N individual predict_proba calls
+    quit_probs     = quit_model.predict_proba(df_all[saved_features])[:, 1]
+    burnout_limits = np.array([
+        burnout_threshold(emp.job_level, emp.total_working_years) for emp in employees
+    ])
+    labels = (df_all["attrition"] == "Yes").astype(int).values
+
+
+    attrition_counts = sum(1 for emp in employees if emp.attrition == "Yes")
+    total            = len(employees)
     annual_attrition_rate = attrition_counts / total if attrition_counts > 0 else 0.15
 
     monthly_natural_rate  = 1 - (1 - annual_attrition_rate) ** (1 / 12)
@@ -105,7 +105,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     else:
         new_hire_monthly_prob = monthly_natural_rate * 2.0
 
-    new_hire_monthly_prob = max(new_hire_monthly_prob,monthly_natural_rate)
+    new_hire_monthly_prob = max(new_hire_monthly_prob, monthly_natural_rate)
     print(f"  >> new_hire_monthly_prob={new_hire_monthly_prob:.4f} "
           f"(10th percentile of {int(short_tenure_mask.sum())} short-tenure employees)")
 
@@ -137,27 +137,16 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
 
     # ── Data-driven stress physics ──
     # stress_gain and recovery derived from stress_amplification + observed natural quit rate.
-    # The base multiplier is no longer hardcoded (0.02/0.015) — it is anchored to:
-    #   monthly_natural_rate: observed monthly attrition speed
-    #   avg_burnout_limit:    how much stress employees can absorb
-    # Ratio of gain:recovery ← sqrt(stress_amplification) (geometric mean between max/min)
     gain_to_recovery_ratio = stress_amplification ** 0.5
-    # Natural drift = how fast accumulated stress should grow for "average" employee
-    #   anchored to monthly_natural_rate × burnout_limit (so drift ∝ real attrition)
     natural_drift = monthly_natural_rate * float(np.mean(burnout_limits))
-    # With formula: gain - recovery = natural_drift, and gain/recovery = ratio:
-    # Guard against ratio ~= 1 which would make the denominator tiny.
     if abs(gain_to_recovery_ratio - 1.0) < 1e-3:
-        # Symmetric gain/recovery around natural drift to avoid numerical blow-up.
         base_gain = natural_drift * 0.75
         base_recovery = natural_drift * 0.25
     else:
         base_recovery  = natural_drift / (gain_to_recovery_ratio - 1)
         base_gain      = base_recovery * gain_to_recovery_ratio
-    # Scale by actual satisfaction/WLB (same formula structure as before, but base is data-driven)
     stress_gain_rate = base_gain     * (1 - (avg_job_satisfaction / 4.0) * 0.5)
     recovery_rate    = base_recovery * (avg_work_life_balance / 4.0)
-    # Final clamp of rates to a stable numeric range for month-level simulation.
     stress_gain_rate = round(float(min(max(stress_gain_rate, 0.0), 0.05)), 4)
     recovery_rate    = round(float(min(max(recovery_rate, 0.0), 0.05)), 4)
 
@@ -166,14 +155,23 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     shockwave_loyalty_factor = round(0.1 * (1 - avg_loyalty * 0.2), 4)
 
     # ── Data-driven stress threshold ──
-    # Derived from REACHABLE stress levels, not burnout limits.
-    # Burnout limits range 0.30–0.85 — baseline stress peaks at 0.06–0.09.
-    # Using np.percentile(burnout_limits, ...) gave 0.44 — unreachable under
-    # normal conditions, so the amplifier never fired.
-    # Fix: compute each employee's initial stress (same formula as agent.py __init__)
-    # and use the (100 - attrition_pct) percentile so the top ~16% most-stressed
-    # employees are above threshold at baseline.
-    initial_stresses = np.array([
+    # The threshold must sit ABOVE baseline peak stress but BELOW what pressure scenarios reach.
+    #
+    # Previous approach (percentile of initial stresses) gave 0.074 — too low.
+    # Baseline stress peaks at ~0.08-0.10 by month 12, so the amplifier was firing
+    # even during calibration runs, inflating prob_scale to 4.69.
+    #
+    # Correct approach: project the actual baseline stress peak forward using the
+    # calibrated stress physics, then add a safety margin above it.
+    #
+    # baseline_stress_peak = max_initial_stress + 12 months of net accumulation at baseline
+    # (stress_gain_rate * baseline_policy_stress_gain_rate) - recovery_rate per month
+    #
+    # baseline_policy_stress_gain_rate is read from POLICIES["baseline"] — single source of truth.
+    from backend.simulation.policies import POLICIES
+    baseline_policy_sgr  = POLICIES["baseline"].stress_gain_rate  # 0.75 currently
+    net_gain_per_month   = max(0.0, stress_gain_rate * baseline_policy_sgr - recovery_rate)
+    initial_stresses     = np.array([
         min(
             max(0.0, (4.0 - emp.job_satisfaction) / 3.0) * 0.06
             + min(emp.years_at_company / 10.0, 1.0) * 0.035,
@@ -181,16 +179,24 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
         )
         for emp in employees
     ])
-    stress_pct       = max(1.0, 100.0 - annual_attrition_rate * 100)  # e.g., 83.9
-    stress_threshold = round(float(np.percentile(initial_stresses, stress_pct)), 4)
+    baseline_stress_peak = float(np.max(initial_stresses)) + 12 * net_gain_per_month
+
+    # Safety margin: how far above baseline peak before amplifier fires.
+    # Derived from gain/recovery ratio — volatile physics need more buffer.
+    # Clamped to 1.1–1.5 range so it stays sensible.
+    gain_recovery_ratio  = stress_gain_rate / recovery_rate if recovery_rate > 0 else 2.0
+    safety_margin        = 1.0 + min(0.5, 0.1 * gain_recovery_ratio)
+    raw_threshold        = baseline_stress_peak * safety_margin
+
+    # Hard ceiling: threshold can never exceed avg burnout tolerance (that would
+    # make the amplifier meaningless even under extreme pressure).
+    avg_burnout          = float(np.mean(burnout_limits))
+    stress_threshold     = round(min(raw_threshold, avg_burnout), 4)
+
     print(f"  >> stress_threshold={stress_threshold:.4f} "
-          f"(pct={stress_pct:.1f} of initial stress distribution)")
+          f"(baseline_peak={baseline_stress_peak:.4f} x margin={safety_margin:.2f}, "
+          f"ceiling=avg_burnout={avg_burnout:.4f})")
 
-    # ── Data-driven behavior engine constants ──
-    # These replace all hardcoded floats in behavior_engine.py.
-    # Each is derived from real employee data so the simulation adapts per dataset.
-
-    avg_burnout = float(np.mean(burnout_limits))
     std_burnout = float(np.std(burnout_limits))
 
     # Neighbor stress influence — scaled by loyalty (high-loyalty orgs feel departures less)
@@ -199,53 +205,32 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     # Fatigue contribution to stress — proportional to how tight burnout limits are
     fatigue_stress_weight = round(neighbor_stress_weight * 0.5, 4)
 
-    # Communication quality cap — derived from inverse of stress_amplification
-    # High-amplification datasets (big gap between quitter/stayer probs) get less comm benefit
+    # Communication quality cap
     comm_quality_cap = round(max(3.0, min(8.0, 1.0 / monthly_natural_rate * 0.1)), 4)
     comm_quality_benefit = round(monthly_natural_rate * 0.1, 4)
 
-    # Fatigue rates — derived from burnout limit distribution
-    # Gain rate: how fast fatigue builds when stressed (faster if burnout limits are tight)
+    # Fatigue rates
     fatigue_gain_rate    = round(monthly_natural_rate * 2.0, 4)
-    # Recovery rate: how fast fatigue heals when not stressed (tied to WLB)
     fatigue_recovery_rate = round(fatigue_gain_rate * (avg_work_life_balance / 4.0) * 0.4, 4)
 
-    # Stress threshold for fatigue accumulation — reuse burnout midpoint
+    # Stress threshold for fatigue accumulation
     fatigue_stress_trigger = round(avg_burnout * 0.85, 4)
 
-    # Motivation recovery — tied to how satisfied the workforce is
+    # Motivation recovery
     motivation_recovery_rate = round((avg_job_satisfaction / 4.0) * monthly_natural_rate * 0.8, 4)
 
-    # WLB decay mechanics — the key fix for KPI_PRESSURE responsiveness
-    # Buffer: stress level below which WLB doesn't degrade (derived from stress_threshold)
+    # WLB decay mechanics
+    # Buffer derived from stress_threshold — now that threshold is ~0.15,
+    # buffer ~0.07 means WLB only degrades when stress is noticeably elevated.
     wlb_stress_buffer = round(stress_threshold * 0.45, 4)
-
-    # WLB stress sensitivity: how strongly stress above buffer impacts WLB target
-    # Driven by stress_amplification — high-amplification = stress matters more for WLB
     wlb_stress_sensitivity = round(stress_amplification ** 0.5 * 0.5, 4)
-
-    # WLB drop rate: max WLB drop per month — proportional to monthly quit rate * amplification
-    # This is the key cap that was previously hardcoded at 0.15
     wlb_drop_rate = round(monthly_natural_rate * stress_amplification ** 0.5 * 1.5, 4)
-
-    # WLB recovery: how fast WLB recovers when stress is low
     wlb_recovery_rate = round(wlb_drop_rate * (avg_work_life_balance / 4.0) * 0.6, 4)
 
-    # Burnout productivity penalty — derived from how severe burnout is in this dataset
-    # More extreme burnout distribution = harder productivity hit
+    # Burnout productivity penalty
     burnout_severity = min(1.0, std_burnout / avg_burnout) if avg_burnout > 0 else 0.3
     burnout_productivity_penalty = round(1.0 - (burnout_severity * 0.05), 4)
 
-    # Survival discount rate — fixes initialization shock (month 1 spike).
-    # Problem: initial employees include people already overdue to quit based on
-    # static features. In reality they would have quit across previous months we
-    # don't simulate. All getting their first roll on month 1 causes a spike.
-    #
-    # Fix: employees who have been at the company for N years have implicitly
-    # survived N*12 monthly quit rolls. Their realized monthly probability should
-    # reflect that survival. New hires (years=0) get full probability.
-    #
-    # We model this as exponential decay: survival_factor = exp(-k * years_at_company)
     calibration = {
         "quit_threshold":           tuned_threshold,
         "stress_threshold":         stress_threshold,
@@ -283,22 +268,16 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     with open(save_path, "w") as f:
         json.dump(calibration, f, indent=2)
 
-    print("+++ Initial calibration saved (mini-sim prob_scale).")
-    print("=== Running empirical calibration (6 full simulation passes)...")
+    print("+++ Initial calibration saved.")
+    print("=== Running empirical calibration...")
 
     # Empirical calibration: run actual full simulations to find the prob_scale
     # that makes the REAL behavioral engine land on the historical attrition rate.
     #
-    # Why this is better than the mini-sim:
-    #   - The mini-sim is a static probability roll — it can't model motivation
-    #     recovery, WLB dynamics, or stress contagion.
-    #   - By running the full simulation 6 times with different prob_scale values
-    #     (binary search), we find the value that the ACTUAL engine needs.
-    #   - Self-corrects for any dataset without tuning any heuristic.
-    #
-    # Order matters: we save the full calibration.json FIRST (above), so the
-    # behavior engine loads the correct stress/recovery constants during the
-    # empirical runs below. We then update only prob_scale in-place.
+    # CRITICAL: calibration runs use stress_amplification_override=0.0 so that
+    # prob_scale is fitted against pure model probability only. The amplifier is
+    # a separate behavioral layer for non-baseline scenarios — mixing it into
+    # calibration inflates prob_scale (was 4.69) making pressure scenarios explode.
     from backend.simulation.time_engine import run_simulation, load_agents_from_db
     from backend.simulation.org_graph import build_org_graph, clear_graph_cache
     from backend.simulation.policies import SimulationConfig
@@ -318,37 +297,35 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     def _run_full_sim_rate(ps, seed=42):
         """Run one calibration_run simulation with a given prob_scale.
         Returns the period attrition rate (fraction, not %).
+        stress_amplification_override=0.0 ensures prob_scale is calibrated
+        independently of the amplifier — they are separate mechanisms.
         """
         agents_copy = copy.deepcopy(calib_agents_base)
         G_copy      = build_org_graph(agents_copy)
         result      = run_simulation(
             calib_config, agents=agents_copy, G=G_copy,
-            policy_name="calibration_run",   # clearly labelled in server logs
+            policy_name="calibration_run",
             seed=seed,
             prob_scale_override=ps,
+            stress_amplification_override=0.0,  # decouple amplifier from calibration
         )
         return result["summary"].get("period_attrition_pct", 0.0) / 100.0
 
     def _stable_rate(ps, seeds=(42, 99)):
-        """Average rate across multiple seeds for noise-resistant measurement.
-        Using 2 seeds per pass halves variance without doubling runtime much.
-        """
+        """Average rate across multiple seeds for noise-resistant measurement."""
         rates = [_run_full_sim_rate(ps, seed=s) for s in seeds]
         return float(np.mean(rates))
 
     # ── Warm-up pass ──────────────────────────────────────────────────────────
-    # Shows how far the static mini-sim estimate is from the real engine.
     warmup_rate = _stable_rate(prob_scale)
     gap = warmup_rate - annual_attrition_rate
     print(f"  [Warm-up] mini-sim scale={prob_scale:.4f} -> real rate={warmup_rate:.4f}  "
           f"target={annual_attrition_rate:.4f}  gap={gap:+.4f}")
 
     # ── Binary search (up to 8 passes) ────────────────────────────────────────
-    # Wide fixed bounds [0.05, 5.0] so we always converge even if the mini-sim
-    # estimate was way off (e.g., overfit model giving a wildly wrong prob_scale).
-    CONVERGENCE_TOL = 0.005   # stop when sim rate is within 0.5% of historical rate
+    CONVERGENCE_TOL = 0.005
     MAX_PASSES      = 8
-    emp_lo, emp_hi  = 0.05, 5.0
+    emp_lo, emp_hi  = 0.05, 10.0
     converged       = False
 
     for i in range(MAX_PASSES):
@@ -373,8 +350,6 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     empirical_prob_scale = round((emp_lo + emp_hi) / 2.0, 4)
 
     # ── Stability check ───────────────────────────────────────────────────────
-    # Run the final scale 3 more times to measure result variance.
-    # High std dev = dataset is noisy / small → warn the user.
     stability_seeds  = [7, 13, 31]
     stability_rates  = [_run_full_sim_rate(empirical_prob_scale, seed=s) for s in stability_seeds]
     stability_mean   = float(np.mean(stability_rates))
@@ -402,10 +377,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     for k, v in calibration.items():
         print(f"   {k}: {v}")
 
-    # Clear ALL engine caches so the very next simulation uses fresh values:
-    #   - behavior_engine: stress/recovery/WLB constants
-    #   - time_engine:     PROB_SCALE, STRESS_THRESHOLD, STRESS_AMPLIFICATION
-    #   - agent:           quit model weights (prevents stale predictions)
+    # Clear ALL engine caches so the very next simulation uses fresh values
     clear_calibration_cache()
     from backend.simulation.time_engine import clear_engine_calibration_cache
     clear_engine_calibration_cache()

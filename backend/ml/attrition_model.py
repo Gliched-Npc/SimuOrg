@@ -43,6 +43,8 @@ OPTIONAL_FEATURES = [
     "overtime",
     "department_encoded",
     "job_role_encoded",
+    "performance_rating",
+    "job_involvement",
 ]
 
 TARGET = "attrition"
@@ -70,7 +72,8 @@ def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
     df['satisfaction_composite'] = (
         df['job_satisfaction'] + df['work_life_balance']
         + df['environment_satisfaction'] + df['job_involvement']
-    ) / 4
+        + df['performance_rating']
+    ) / 5
     df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
     df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 
@@ -162,7 +165,7 @@ def tune_threshold(model, X_val, y_val) -> float:
     return best_threshold
 
 
-def train_attrition_model():
+def train_attrition_model(pre_clean_metrics: dict = None):
     global FEATURES
 
     print("=== Loading data from database...")
@@ -377,6 +380,26 @@ def train_attrition_model():
         print("  ---  WARNING: High variance across folds - model reliability is unstable.")
 
     cv_mean = float(cv_scores.mean())
+    # Calculate Global Feature Importance
+    importances = model.feature_importances_
+    pairs = sorted(zip(FEATURES, importances.tolist()), key=lambda x: x[1], reverse=True)
+    top_features = [{"feature": f, "importance": round(v, 4)} for f, v in pairs[:3]]
+
+    # Dynamic Data Engineering Recommendations (Pre-Simulation Checks)
+    if cv_mean >= 0.80:
+        rec = "Simulation results are highly reliable. Strong predictive signal found."
+    elif cv_mean >= 0.65:
+        rec = "Simulation shows directional trends. Treat exact numbers with caution as the model has moderate predictive power."
+    else:
+        # Investigate WHY the signal is weak to give actionable Data Science advice
+        if imbalance_ratio > 4.0:
+            rec = f"Signal is weak due to SEVERE CLASS IMBALANCE ({imbalance_ratio}:1). SOLUTION: [OPTION 1] Extend your HR data export window from 1 year to 3 years to capture more 'Quit' events. [OPTION 2] Use SMOTE to synthetically balance your training data before uploading."
+        elif len(OPTIONAL_FEATURES) > len([f for f in OPTIONAL_FEATURES if f in FEATURES]):
+            missing = [f for f in OPTIONAL_FEATURES if f not in FEATURES]
+            rec = f"Signal is weak and lacks context. SOLUTION: [OPTION 1] Your dataset is missing optional features like {missing}. Re-uploading your CSV with these columns often reveals hidden flight factors. [OPTION 2] Proceed anyway, but projections are unreliable."
+        else:
+            rec = "Signal is too weak (the model cannot find a mathematical reason why your employees quit). SOLUTION: [OPTION 1] Enrich your dataset with Engagement Survey scores or Compensation Benchmarks. [OPTION 2] Your turnover is largely random / uncontrollable."
+
     quality_report = {
         "auc_roc":             round(float(auc), 4),
         "cv_auc_mean":         round(cv_mean, 4),
@@ -385,22 +408,26 @@ def train_attrition_model():
         "train_accuracy":      round(float(train_accuracy), 4),
         "features_used":       len(FEATURES),
         "bonus_features":      [f for f in OPTIONAL_FEATURES if f in FEATURES],
+        "top_drivers":         top_features,
         "signal_strength":     (
             "strong"   if cv_mean >= 0.80 else
             "moderate" if cv_mean >= 0.65 else
             "weak"
         ),
         "simulation_reliable": bool(cv_mean >= 0.65),
-        "recommendation": (
-            "Simulation results are reliable."
-            if cv_mean >= 0.80 else
-            "Simulation shows directional trends. Treat exact numbers with caution."
-            if cv_mean >= 0.65 else
-            "Signal too weak — simulation results are unreliable. "
-            "Consider enriching your dataset with exit interview data, "
-            "engagement scores, or compensation benchmarks."
-        ),
+        "recommendation":      rec,
     }
+    
+    # Inject external transparency metrics if provided
+    if pre_clean_metrics:
+        quality_report.update({
+            "trust_score":    pre_clean_metrics.get("trust_score", 100),
+            "cleaning_audit": pre_clean_metrics.get("cleaning_audit", []),
+            "data_status":    pre_clean_metrics.get("status", "healthy")
+        })
+    else:
+        quality_report["trust_score"] = 100
+        quality_report["cleaning_audit"] = []
 
     os.makedirs("backend/ml/exports", exist_ok=True)
     joblib.dump(

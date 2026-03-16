@@ -56,20 +56,45 @@ def load_agents_from_db() -> list[EmployeeAgent]:
     return agents
 
 
-def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=None, policy_name: str = "custom", seed: int = 42, prob_scale_override: float = None) -> dict:
+def run_simulation(
+    config: SimulationConfig = None,
+    agents=None,
+    G: OrgGraph = None,
+    policy_name: str = "custom",
+    seed: int = 42,
+    prob_scale_override: float = None,
+    stress_amplification_override: float = None,
+) -> dict:
+    """
+    Run one simulation pass.
+
+    prob_scale_override: override prob_scale from calibration.json (used by calibration loop).
+    stress_amplification_override: override stress_amplification from calibration.json.
+        Pass 0.0 during calibration runs so prob_scale is fitted independently of
+        the amplifier — they are separate mechanisms and must not be co-calibrated.
+    """
     if config is None:
         config = SimulationConfig()
 
     rng = np.random.default_rng(seed)
 
     # Read fresh calibration on every call (lazy-loaded, invalidated after retrain)
-    cal                = _get_calibration()
-    STRESS_THRESHOLD   = cal.get("stress_threshold", 0.5)
+    cal                  = _get_calibration()
+    STRESS_THRESHOLD     = cal.get("stress_threshold", 0.5)
     NATURAL_MONTHLY_RATE = cal.get("monthly_natural_rate", 0.0145)
-    STRESS_AMPLIFICATION = cal.get("stress_amplification", 2.0)
+
     # prob_scale_override lets the calibration loop test different scales without
     # rewriting calibration.json between runs.
     _prob_scale = prob_scale_override if prob_scale_override is not None else cal.get("prob_scale", 1.0)
+
+    # stress_amplification_override = 0.0 during calibration so binary search finds
+    # prob_scale without amplifier interference. Real simulations use the stored value.
+    _stress_amp = (
+        stress_amplification_override
+        if stress_amplification_override is not None
+        else cal.get("stress_amplification", 2.0)
+    )
+
     _new_hire_cap = cal.get("new_hire_monthly_prob", NATURAL_MONTHLY_RATE * 2.0)
 
     print(f"=== Starting simulation - Policy: {policy_name.upper()}")
@@ -97,11 +122,12 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     max_id = max(a.employee_id for a in agents)
     initial_headcount = len([a for a in agents if a.is_active])
     initial_avg_stress = float(np.mean([a.stress for a in agents if a.is_active]))
-    logs   =  []
+    logs = []
+
     for month in range(1, config.duration_months + 1):
         print(f"--- Month {month}...")
 
-        #   Update all agent states
+        # Update all agent states
         for agent in agents:
             if agent.is_active:
                 update_agent_state(
@@ -140,15 +166,15 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
             # ── Survival discount (fixes month-1 initialization spike) ──
             # Existing employees have implicitly survived years_at_company * 12 monthly
-            # quit rolls that were never simulated.  A 10-yr veteran's realized
-            # monthly probability should reflect that survival.  New hires (years=0)
+            # quit rolls that were never simulated. A 10-yr veteran's realized
+            # monthly probability should reflect that survival. New hires (years=0)
             # get exp(0) = 1.0 (unaffected).
             if agent.years_at_company > 0:
                 survival_discount = np.exp(-monthly_prob * 12 * agent.years_at_company)
                 monthly_prob *= survival_discount
 
             excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
-            stress_scale   = 1.0 + STRESS_AMPLIFICATION * excess_stress
+            stress_scale   = 1.0 + _stress_amp * excess_stress  # uses override during calibration
             effective_prob = min(1.0, monthly_prob * _prob_scale * stress_scale)
 
             if rng.random() < effective_prob:
@@ -162,18 +188,12 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             # breaks contagion paths. Inactive agents are skipped by behavior_engine.
 
         # Hiring — employer attractiveness model.
-        # Companies under stress struggle to attract candidates. Calm workplaces
-        # fill roles quickly. Stressful ones lose the hiring race.
-        #
-        # fill_prob  = 0.95 at zero stress (calm, nearly all quits replaced)
-        #            = 0.50 at max stress  (toxic culture, candidates avoid it)
-        # Uses previous month's avg_stress so the effect is one month delayed
-        # (real companies feel reputation lag when stress spikes).
+        # fill_prob = 0.95 at zero stress (calm, nearly all quits replaced)
+        #           = 0.50 at max stress  (toxic culture, candidates avoid it)
         if config.hiring_active:
             prev_avg_stress = logs[-1]["avg_stress"] if logs else initial_avg_stress
             fill_prob       = max(0.50, 0.95 - prev_avg_stress * 0.50)
 
-            filled_this_month = 0
             # Gather department-level satisfaction stats for realistic new hire init
             dept_agents: dict[str, list[EmployeeAgent]] = {}
             for a in agents:
@@ -183,13 +203,12 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
             for quitter in list(quitting_agents):
                 if rng.random() < fill_prob:
                     max_id += 1
-                    # Spawn via from_template — goes through __init__, no attribute misses
                     new_agent = EmployeeAgent.from_template(quitter, max_id, rng)
 
                     # ── Sample satisfaction from department peers (fixes JobSat drift) ──
-                    # Hardcoded 3.0 caused new hires to inflate avg satisfaction under
-                    # pressure. Drawing from existing department distribution ensures
-                    # replacements inherit the current departmental climate.
+                    # Hardcoded 3.0 in from_template caused new hires to inflate avg
+                    # satisfaction under pressure. Drawing from existing department
+                    # distribution ensures replacements inherit the current climate.
                     dept_peers = dept_agents.get(quitter.department, [])
                     if dept_peers:
                         peer = rng.choice(dept_peers)
@@ -210,7 +229,7 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
                             edge_type="manager"
                         )
 
-        #  Metrics
+        # Metrics
         active_agents = [a for a in agents if a.is_active]
         if active_agents:
             avg_stress       = np.mean([a.stress            for a in active_agents])
@@ -260,10 +279,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
     final_headcount   = logs[-1]["headcount"] if logs else initial_headcount
     period_months     = config.duration_months
 
-    # Use average headcount as denominator for voluntary attrition rate.
-    # Initial headcount is wrong for shrinking workforces (layoff scenarios) —
-    # 432 quits / 4410 initial = 9.8%, but the company was down to 494 by month 12.
-    # Average headcount across the period correctly reflects the population at risk.
     avg_headcount        = sum(l["headcount"] for l in logs) / len(logs) if logs else initial_headcount
     period_attrition_pct = (total_quits / avg_headcount * 100) if avg_headcount > 0 else 0.0
     annual_attrition_pct = period_attrition_pct * (12.0 / period_months) if period_months > 0 else period_attrition_pct
@@ -308,6 +323,6 @@ def run_simulation(config: SimulationConfig = None, agents=None, G: OrgGraph=Non
 
 
 if __name__ == "__main__":
-    policy  = "baseline"
+    policy  = "kpi_pressure"
     config  = get_policy(policy)
-    results = run_simulation(config, policy_name=policy)  
+    results = run_simulation(config, policy_name=policy)

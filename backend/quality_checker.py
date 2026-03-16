@@ -6,25 +6,26 @@
 import pandas as pd
 
 
-def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[dict]:
+def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0, junk_removed: int = 0, null_rates: dict = None, cleaning_audit: list[str] = None) -> dict:
     """
     Analyse a normalized + cleaned DataFrame and return a list of issues.
 
     Each issue is a dict:
         severity  : "error" | "warning" | "info"
         code      : short machine-readable key (e.g. "high_attrition_rate")
-        message   : plain-English description
-        suggestion: actionable fix for the client
+        message   : plain-English description of the consequence
+        suggestion: actionable fix for the client (Fix vs Proceed)
     """
     issues: list[dict] = []
     total = len(df)
+    trust_score = 100
 
     if total == 0:
         issues.append({
             "severity": "error",
             "code": "empty_dataset",
-            "message": "The dataset is empty after cleaning.",
-            "suggestion": "Re-upload a file with at least 50 employee rows.",
+            "message": "CONSEQUENCE: The dataset is empty after cleaning. The Machine Learning model has zero data to train on.",
+            "suggestion": "SOLUTION: You must fix the dataset and re-upload. Ensure the file contains at least 50 valid employee rows with no severe formatting corruption.",
         })
         return issues
 
@@ -35,22 +36,23 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "error",
             "code": "extreme_attrition_rate",
-            "message": f"Attrition rate is {attrition_rate*100:.1f}% — this is unrealistically high.",
-            "suggestion": "Verify your Attrition column values. Common mistake: encoding all employees as 'Yes'.",
+            "message": f"CONSEQUENCE: Attrition rate is {attrition_rate*100:.1f}%. The ML model will assume firing/quitting is the normal operational state, completely invalidating the simulation physics.",
+            "suggestion": "SOLUTION: Fix the dataset by verifying your Attrition column values (a common mistake is encoding all active employees as 'Yes'). You cannot proceed with this upload.",
         })
     elif attrition_rate > 0.25:
         issues.append({
             "severity": "warning",
             "code": "high_attrition_rate",
-            "message": f"Attrition rate is {attrition_rate*100:.1f}% (industry average is 10–20%).",
-            "suggestion": "If this rate is real, simulation results may skew pessimistic. Consider filtering to active-only employees.",
+            "message": f"CONSEQUENCE: Attrition rate is {attrition_rate*100:.1f}% (industry average is 10–20%). If you proceed, the simulation engine's baseline will skew extremely pessimistic.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix the data by filtering out older historical terminations before uploading. [OPTION 2] Proceed anyway, but treat the simulation results as a 'worst-case scenario' stress test.",
         })
     elif attrition_rate < 0.03 and total > 100:
+        trust_score -= 10
         issues.append({
             "severity": "warning",
             "code": "low_attrition_rate",
-            "message": f"Attrition rate is only {attrition_rate*100:.1f}% — the model may lack signal.",
-            "suggestion": "Consider augmenting with exit-interview data or a longer historical window.",
+            "message": f"CONSEQUENCE: Attrition rate is only {attrition_rate*100:.1f}%. The ML model will not have enough examples of 'Quitters' to learn what causes attrition, resulting in weak predictive signal.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix the dataset by extending your historical export window from 1 year to 3 years to capture more exits. [OPTION 2] Proceed anyway, but expect the model metrics to report 'Low Reliability'.",
         })
 
     # ── Dataset size ──
@@ -58,15 +60,15 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "error",
             "code": "dataset_too_small",
-            "message": f"Only {total} employees — too few to train a reliable model.",
-            "suggestion": "Upload at least 50 employees (ideally 200+) for statistically meaningful results.",
+            "message": f"CONSEQUENCE: Only {total} employees found. Deep learning and XGBoost models will immediately violently overfit to this tiny sample size.",
+            "suggestion": "SOLUTION: You must fix the dataset. Upload a file containing at least 50 employees (ideally 200+) to generate statistically meaningful cross-validation folds.",
         })
     elif total < 100:
         issues.append({
             "severity": "warning",
             "code": "small_dataset",
-            "message": f"Dataset has {total} employees. Results will have high variance.",
-            "suggestion": "Upload more data if available. Treat simulation numbers as directional, not precise.",
+            "message": f"CONSEQUENCE: Dataset has only {total} employees. The ML model will struggle to generalize, and simulation projections will have high statistical variance.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix by uploading more historical data if available in your HRIS. [OPTION 2] Proceed anyway, but treat all simulation headcount projections as directional trends rather than precise numbers.",
         })
 
     # ── Duplicates ──
@@ -75,15 +77,24 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "warning",
             "code": "high_duplication",
-            "message": f"{duplicates_removed} duplicate employee IDs were removed ({duplication_rate*100:.0f}% of raw data).",
-            "suggestion": "Check your data source for repeated exports or merge errors.",
+            "message": f"CONSEQUENCE: {duplicates_removed} duplicate IDs were found ({duplication_rate*100:.0f}% of raw data). Excessive duplicates usually mean your SQL export JOINed incorrectly.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix your HRIS export script to prevent cross-joining data. [OPTION 2] Proceed anyway; we have automatically purged the duplicates, but double-check that your total headcount is accurate.",
         })
     elif duplicates_removed > 0:
         issues.append({
             "severity": "info",
             "code": "duplicates_removed",
-            "message": f"{duplicates_removed} duplicate EmployeeIDs removed automatically.",
-            "suggestion": "No action needed — duplicates were safely dropped.",
+            "message": f"CONSEQUENCE: {duplicates_removed} minor duplicate EmployeeIDs were detected and dropped to prevent ML data leakage.",
+            "suggestion": "SOLUTION: Proceed normally. No action needed.",
+        })
+
+    # ── Junk rows ──
+    if junk_removed > 0:
+        issues.append({
+            "severity": "warning",
+            "code": "junk_rows_purged",
+            "message": f"CONSEQUENCE: {junk_removed} junk rows were detected (employees missing more than 40% of standard HR data). These rows were purged because they provide no learnable pattern for the AI.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix your HRIS export to ensure a full column-set is exported for all active employees. [OPTION 2] Proceed anyway; we have cleaned the 'phantom' data to protect model accuracy.",
         })
 
     # ── Job level validity ──
@@ -92,8 +103,8 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "warning",
             "code": "invalid_job_levels",
-            "message": f"{invalid_levels} employees had job levels outside 1–5 (auto-clipped).",
-            "suggestion": "Review the JobLevel column — values outside 1–5 reduce model accuracy.",
+            "message": f"CONSEQUENCE: {invalid_levels} employees had job levels outside the standard 1–5 range. The ML model uses Job Level to calculate career trajectory; invalid levels corrupt this calculation.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix the JobLevel column in your CSV to map correctly to a 1 (Entry) to 5 (Executive) scale. [OPTION 2] Proceed anyway; we will Auto-Clip extreme values to 1 or 5, but precision will drop.",
         })
 
     # ── Negative income ──
@@ -102,9 +113,47 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "warning",
             "code": "negative_income",
-            "message": f"{negative_income} employees had negative monthly income (set to 0).",
-            "suggestion": "Verify income data — negative values usually indicate data entry errors.",
+            "message": f"CONSEQUENCE: {negative_income} employees had negative monthly income. The ML model interprets salary as a core retention driver; negative numbers will severely distort the compensation importance coefficients.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix your HRIS data export to resolve negative salary entry errors. [OPTION 2] Proceed anyway; we will Auto-Clip these to 0, but compensation analysis accuracy will be degraded.",
         })
+
+    # ── Feature Sparsity (Exact Row Counts & Column Priority) ──
+    # CRITICAL: Mandatory for core simulation physics + ML signal
+    CRITICAL_FEATURES = {
+        "MonthlyIncome", "JobLevel", "YearsAtCompany", "TotalWorkingYears", 
+        "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction", "Attrition",
+        "PerformanceRating", "JobInvolvement", "YearsWithCurrManager"
+    }
+
+    if null_rates:
+        for col, null_rate in null_rates.items():
+            if null_rate == 0:
+                continue
+            
+            missing_count = int(null_rate * total)
+            is_critical = col in CRITICAL_FEATURES
+            
+            # Severity Logic:
+            # - Critical feature missing > 10% -> Warning
+            # - Any feature missing > 50% -> Warning (Critical) / Info (Bonus)
+            severity = "info"
+            if is_critical and null_rate > 0.10:
+                severity = "warning"
+            elif null_rate > 0.50 and not is_critical:
+                severity = "info" # It's okay for bonus features like DistanceFromHome to be sparse
+            elif null_rate > 0.50 and is_critical:
+                severity = "warning"
+
+            if severity in ["warning", "info"]:
+                tier = "CRITICAL CORE" if is_critical else "BONUS ENRICHMENT"
+                if severity == "warning": trust_score -= (8 if is_critical else 3)
+                else: trust_score -= (2 if is_critical else 1) # Sligth penalty for info-level gaps
+                issues.append({
+                    "severity": severity,
+                    "code": f"sparsity_{col.lower()}",
+                    "message": f"CONSEQUENCE: {tier} feature '{col}' is missing {missing_count} rows ({null_rate*100:.1f}%).",
+                    "suggestion": f"SOLUTION: [OPTION 1] Fix the {col} column in your source data to restore full accuracy. [OPTION 2] Proceed anyway; we will Auto-Fill these using company medians, but results will be generalized.",
+                })
 
     # ── Satisfaction columns with no variance ──
     for col in ["JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction"]:
@@ -112,17 +161,44 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
             issues.append({
                 "severity": "warning",
                 "code": f"no_variance_{col.lower()}",
-                "message": f"{col} has near-zero variance — all employees have the same value.",
-                "suggestion": f"The model can't learn from {col}. If this is survey data, check that scores were actually collected.",
+                "message": f"CONSEQUENCE: The '{col}' column has near-zero variance (everyone has the exact same score). The ML model will completely ignore this feature because it provides zero mathematical signal.",
+                "suggestion": f"SOLUTION: [OPTION 1] Fix the data. Ensure you aren't uploading 'default' or 'median' values instead of actual employee survey results. [OPTION 2] Proceed anyway, but realize the simulation cannot test policies related to {col}.",
             })
+
+    # ── Pre-Training Mathematical Correlation (Sanity Check) ──
+    # Check if ANY numeric features actually correlate with Attrition
+    try:
+        numeric_cols = df.select_dtypes(include=["number"]).columns
+        if len(numeric_cols) > 0 and "Attrition" in df.columns:
+            # Map 'Yes'/'No' to numeric for correlation mapping
+            temp_y = df["Attrition"].map({"Yes": 1, "No": 0})
+            if temp_y.notna().any() and temp_y.std() > 0:
+                # Filter out columns with zero variance to avoid divide-by-zero warnings
+                valid_cols = [c for c in numeric_cols if df[c].std() > 0]
+                if valid_cols:
+                    corrs = df[valid_cols].apply(lambda x: x.corr(temp_y))
+                    max_corr = corrs.abs().max()
+                else:
+                    max_corr = 0
+                
+                # If absolutely no feature has even a 5% correlation with attrition
+                if max_corr < 0.05:
+                    issues.append({
+                        "severity": "warning",
+                        "code": "zero_mathematical_signal",
+                        "message": "CONSEQUENCE: Our pre-training mathematical scan detects almost zero relationship between your employee features (age, income, satisfaction) and whether they quit. The ML model will struggle to find a flight-risk pattern, and simulation outputs will be highly randomized.",
+                        "suggestion": "SOLUTION: [OPTION 1] Fix the dataset by ensuring your data isn't randomized, obfuscated, or synthesized poorly. [OPTION 2] Proceed anyway, but be aware your resulting 'quit_probability' predictions and SHAP graphs will be completely flat and unreliable.",
+                    })
+    except Exception:
+        pass # Silently fail the sanity check if Pandas correlation calculation fails
 
     # ── Missing Gender ──
     if "Gender" not in df.columns:
         issues.append({
             "severity": "info",
             "code": "no_gender_column",
-            "message": "Gender column not found — 'Unknown' will be used for all employees.",
-            "suggestion": "This is optional and does not affect simulation accuracy.",
+            "message": "CONSEQUENCE: Gender column not found. The model will not be able to analyze demographic-based flight risks.",
+            "suggestion": "SOLUTION: [OPTION 1] Fix by uploading Demographics data if you want Diversity & Inclusion retention insights. [OPTION 2] Proceed normally; 'Unknown' will be used. This is optional and does not affect core model physics.",
         })
 
     # ── All-clear ──
@@ -130,8 +206,25 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> list[di
         issues.append({
             "severity": "info",
             "code": "all_checks_passed",
-            "message": "All quality checks passed — dataset looks clean.",
-            "suggestion": "Proceed with confidence.",
+            "message": "CONSEQUENCE: All quality checks passed. The dataset structure perfectly matches the engine's requirements.",
+            "suggestion": "SOLUTION: Proceed with confidence.",
         })
 
-    return issues
+    # --- Trust Score Adjustments for Global Metrics ---
+    if attrition_rate > 0.40: trust_score -= 20
+    elif attrition_rate > 0.25: trust_score -= 10
+    
+    if total < 50: trust_score -= 20
+    elif total < 100: trust_score -= 10
+    
+    if junk_removed > total * 0.1: trust_score -= 10
+    if duplicates_removed > 0: trust_score -= 5
+    
+    trust_score = max(10, min(100, trust_score)) # Clamp 10-100
+
+    return {
+        "status": "danger" if any(i["severity"] == "error" for i in issues) else "warning" if issues else "healthy",
+        "trust_score": trust_score,
+        "issues": issues,
+        "cleaning_audit": cleaning_audit or []
+    }

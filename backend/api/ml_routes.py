@@ -22,7 +22,105 @@ def get_model_metrics():
             detail="No quality report found. Train a model first via POST /api/upload/dataset.",
         )
     with open(report_path) as f:
-        return json.load(f)
+        metrics = json.load(f)
+
+    # Inject dynamic hyper-specific business recommendations
+    try:
+        with open("backend/ml/exports/calibration.json") as f:
+            cal = json.load(f)
+        
+        from sqlmodel import Session, select
+        from backend.database import engine as db_engine
+        from backend.models import Employee
+        
+        with Session(db_engine) as session:
+            employees = session.exec(select(Employee)).all()
+            
+        attrition = cal.get("annual_attrition_rate", 0)
+        stress_gain = cal.get("stress_gain_rate", 0)
+        
+        if employees:
+            wlb = float(np.mean([e.work_life_balance for e in employees]))
+            mgr_years = float(np.mean([getattr(e, "years_with_curr_manager", 0) for e in employees]))
+            tenure = float(np.mean([e.years_at_company for e in employees]))
+            
+            recs = []
+            
+            if attrition > 0.20 and tenure > 5:
+                # High attrition + high tenure
+                rec = (
+                    "**SCENARIO: CRITICAL VETERAN TURNOVER**\\n"
+                    f"You are losing deeply entrenched, veteran talent (average tenure {tenure:.1f} years). "
+                    "This is the most expensive type of turnover, usually stemming from stagnation or extreme burnout.\\n\\n"
+                    "**SOLUTION:** We strongly advise simulating the **'Promotion Freeze'** policy (to measure stagnation risk) "
+                    "versus **'Flexible Work'** (to see if veteran burnout can be reversed). Inspect the SHAP Analysis for 'years_since_last_promotion'."
+                )
+            elif attrition > 0.20 and mgr_years < 2.0:
+                # High attrition + low manager tenure
+                rec = (
+                    "**SCENARIO: MANAGERIAL FRICTION**\\n"
+                    f"Your {attrition*100:.1f}% turnover is heavily compounded by poor or unstable manager relationships "
+                    f"(average time with manager is only {mgr_years:.1f} years).\\n\\n"
+                    "**SOLUTION:** Simulating the **'Remote Work'** policy immediately is critical. Removing physical proximity "
+                    "to unestablished management often acts as the fastest temporary band-aid for retention."
+                )
+            elif attrition > 0.20 and wlb <= 2.5:
+                # High attrition + low wlb
+                rec = (
+                    "**SCENARIO: SYSTEMIC BURNOUT**\\n"
+                    f"Your workforce's Work-Life Balance metrics (average {wlb:.1f}/4.0) are currently below sustainable thresholds. "
+                    "Prolonged operation in this state historically precedes sharp increases in voluntary attrition.\\n\\n"
+                    "**SOLUTION:** We strongly suggest simulating the **'Flexible Work'** policy to mathematically model the stabilizing "
+                    "impact of schedule autonomy on your retention curves."
+                )
+            elif attrition > 0.20:
+                # High generic attrition
+                rec = (
+                    "**SCENARIO: CRITICAL OVERALL ATTRITION**\\n"
+                    f"Your organization is experiencing critical turnover levels ({attrition*100:.1f}%). At this rate, the compounding "
+                    "cost of replacement hiring is severely degrading operational efficiency.\\n\\n"
+                    "**SOLUTION:** We recommend utilizing the **'Overtime Pay'** or **'Flexible Work'** simulations to evaluate which "
+                    "intervention offers the most cost-effective retention ROI. Consult the SHAP Analysis to identify urgent flight-risk drivers."
+                )
+            elif attrition < 0.15 and stress_gain > 0.03:
+                # Low attrition but high baseline stress gain
+                rec = (
+                    "**SCENARIO: THE POWDER KEG**\\n"
+                    f"Warning: While your {attrition*100:.1f}% turnover looks stable, our ML models show your staff is absorbing stress "
+                    f"at a dangerously fast rate ({stress_gain:.3f}/mo). Employees are operating dangerously close to their maximum burnout thresholds.\\n\\n"
+                    "**SOLUTION:** This is a 'powder keg' state. Do not run the **'KPI Pressure'** simulation in reality without first testing "
+                    "the **'Layoff'** shockwave simulation to expose how fragile your current ecosystem is."
+                )
+            else:
+                # Healthy
+                rec = (
+                    "**SCENARIO: OPTIMAL STABILITY**\\n"
+                    f"Your workforce is currently operating at optimal stability ({attrition*100:.1f}% turnover) with healthy recovery metrics.\\n\\n"
+                    "**SOLUTION:** To maximize the utility of this platform, we recommend utilizing the **'KPI Pressure'** simulation as a stress-test. "
+                    "This allows leadership to precisely map the organization's maximum safe operational bandwidth before structural turnover triggers."
+                )
+            
+            # --- Req: STAR ATTRITION Scenario ---
+            quitters = [e for e in employees if str(e.attrition).strip().lower() == "yes"]
+            if quitters:
+                avg_perf_quit = np.mean([getattr(e, "performance_rating", 3) for e in quitters])
+                if avg_perf_quit > 3.2:
+                    star_rec = (
+                        "**SCENARIO: STAR ATTRITION (HIGH PERFORMNER LEAK)**\\n"
+                        f"Your historical data shows that employees who left had an average performance rating of {avg_perf_quit:.1f}/4.0. "
+                        "You aren't just losing headcount; you are losing your highest-value productivity drivers.\\n\\n"
+                        "**SOLUTION:** This usually indicates your 'Star' performers feel under-rewarded or over-pressured. "
+                        "Simulate the **'Overtime Pay'** policy to see if financial recognition stabilizes them, or **'Promotion Freeze'** to see if "
+                        "lack of growth is the primary driver."
+                    )
+                    # Prepend if no critical rec found yet, or append
+                    rec = star_rec + "\\n\\n---\\n\\n" + rec
+            
+            metrics["business_recommendation"] = rec
+    except Exception as e:
+        metrics["business_recommendation"] = f"Unable to generate dynamic recommendation ({str(e)})."
+        
+    return metrics
 
 
 # ── Req #21: SHAP feature importance endpoint ────────────────────────────────

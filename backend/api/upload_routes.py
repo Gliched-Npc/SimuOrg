@@ -33,7 +33,7 @@ def get_data_issues() -> list[dict]:
     return _last_data_issues
 
 
-def _background_train_and_calibrate(job_id: str):
+def _background_train_and_calibrate(job_id: str, quality_report: dict = None):
     """Runs in a background thread after ingestion is complete."""
     def _set(status=None, **kw):
         with _JOBS_LOCK:
@@ -43,7 +43,7 @@ def _background_train_and_calibrate(job_id: str):
 
     try:
         _set(status="training")
-        model_quality = train_attrition_model()
+        model_quality = train_attrition_model(pre_clean_metrics=quality_report)
         train_burnout_estimator()
         _agent_module._quit_model_cache = None  # bust lazy-load cache
 
@@ -109,15 +109,18 @@ async def validate_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
 
     schema_report = build_schema_report(df, overtime_was_present)
-    df, duplicates_removed = clean_dataframe(df)
-    issues = check_data_quality(df, duplicates_removed)
+    df, duplicates_removed, junk_removed, null_rates, cleaning_audit = clean_dataframe(df)
+    quality_report = check_data_quality(df, duplicates_removed, junk_removed, null_rates, cleaning_audit)
 
     return {
         "status":          "validated",
         "rows":            len(df),
         "duplicates_removed": duplicates_removed,
+        "junk_removed":    junk_removed,
         "schema_report":   schema_report,
-        "issues":          issues,
+        "trust_score":     quality_report["trust_score"],
+        "issues":          quality_report["issues"],
+        "cleaning_audit":  quality_report["cleaning_audit"],
         "message":         "Validation complete. Review issues, then POST to /api/upload/dataset to ingest.",
     }
 
@@ -145,10 +148,9 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
 
     # 3. Schema report + clean
     schema_report = build_schema_report(df, overtime_was_present)
-    df, duplicates_removed = clean_dataframe(df)
-    quality = validate_data_quality(df, duplicates_removed=duplicates_removed)
-    issues = check_data_quality(df, duplicates_removed)
-    _last_data_issues = issues  # persist for sim_routes (#19)
+    df, duplicates_removed, junk_removed, null_rates, cleaning_audit = clean_dataframe(df)
+    quality_report = check_data_quality(df, duplicates_removed, junk_removed, null_rates, cleaning_audit)
+    _last_data_issues = quality_report["issues"]  # persist for sim_routes (#19)
 
     # 4. Ingest into DB (fast — no ML yet)
     init_db()
@@ -162,7 +164,11 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     with _JOBS_LOCK:
         _JOBS[job_id] = {"status": "queued"}
 
-    thread = threading.Thread(target=_background_train_and_calibrate, args=(job_id,), daemon=True)
+    thread = threading.Thread(
+        target=_background_train_and_calibrate, 
+        args=(job_id, quality_report), 
+        daemon=True
+    )
     thread.start()
 
     return {
@@ -172,9 +178,10 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
         "job_id":       job_id,
         "poll_url":     f"/api/upload/status/{job_id}",
         "message":      "Dataset ingested. Training and calibration running in background. Poll poll_url for status.",
-        "warnings":     quality["warnings"] or None,
-        "issues":       issues,
-        "schema_report": schema_report,
+        "trust_score":    quality_report["trust_score"],
+        "issues":         quality_report["issues"],
+        "cleaning_audit": quality_report["cleaning_audit"],
+        "schema_report":  schema_report,
     }
 
 

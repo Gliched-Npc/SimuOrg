@@ -1,15 +1,35 @@
 {
-  "auc_roc": 0.952,
-  "cv_auc_mean": 0.9512,
-  "cv_auc_std": 0.0112,
-  "test_accuracy": 0.8968,
-  "train_accuracy": 0.9471,
-  "features_used": 19,
+  "auc_roc": 0.7262,
+  "cv_auc_mean": 0.8025,
+  "cv_auc_std": 0.0412,
+  "test_accuracy": 0.8027,
+  "train_accuracy": 0.9014,
+  "features_used": 22,
   "bonus_features": [
+    "overtime",
     "department_encoded",
-    "job_role_encoded"
+    "job_role_encoded",
+    "performance_rating",
+    "job_involvement"
+  ],
+  "top_drivers": [
+    {
+      "feature": "total_working_years",
+      "importance": 0.0828
+    },
+    {
+      "feature": "overtime",
+      "importance": 0.0799
+    },
+    {
+      "feature": "satisfaction_composite",
+      "importance": 0.067
+    }
   ],
   "signal_strength": "strong",
   "simulation_reliable": true,
-  "recommendation": "Simulation results are reliable."
+  "recommendation": "Simulation results are highly reliable. Strong predictive signal found.",
+  "trust_score": 100,
+  "cleaning_audit": [],
+  "data_status": "warning"
 }
