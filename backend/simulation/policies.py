@@ -26,7 +26,7 @@ POLICIES = {
 
     "remote_work": SimulationConfig(
         workload_multiplier=0.9,
-        motivation_decay_rate=0.012,  # ISOLATION: Higher decay due to lack of office touchpoints
+        motivation_decay_rate=0.004,  # ISOLATION: Higher decay due to lack of office touchpoints
         shock_factor=0.15,
         stress_gain_rate=0.6,         # COMMUTE RELIEF: Lowered stress gain
         wlb_boost=0.4,                

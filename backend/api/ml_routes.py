@@ -150,7 +150,7 @@ def explain_employee_shap(employee_id: int):
     if hasattr(base_model, "get_booster"):
         xgb_model = base_model
     elif hasattr(base_model, "base_model"):
-        xgb_model = base_model
+        xgb_model = base_model.base_model
     else:
         xgb_model = base_model
 
@@ -192,7 +192,8 @@ def explain_employee_shap(employee_id: int):
         import shap
         explainer = shap.TreeExplainer(xgb_model)
         shap_values = explainer.shap_values(X)
-        importances = np.abs(shap_values[0])
+        sv = shap_values.values if hasattr(shap_values, "values") else shap_values
+        importances = np.abs(sv[0])
     except Exception:
         # Fallback: use global feature importances
         importances = xgb_model.feature_importances_
@@ -218,14 +219,104 @@ def explain_employee_shap(employee_id: int):
     }
 
 
-# ── Req #22: LIME stub endpoint ──────────────────────────────────────────────
+# ── Req #23: Global Feature Importance endpoint ─────────────────────────────
 
-@router.get("/lime/{employee_id}")
-def explain_employee_lime(employee_id: int):
-    """Stub endpoint for LIME-based explanations. Not yet implemented."""
+@router.get("/feature-importance")
+def get_global_feature_importance():
+    """
+    Return global feature importance for the attrition model, bucketed into
+    Most / Moderate / Least influential features.
+    """
+    import joblib
+    from sqlmodel import Session, select
+    from backend.database import engine as db_engine
+    from backend.models import Employee
+    from backend.ml.attrition_model import engineer_features
+
+    model_path = "backend/ml/exports/quit_probability.pkl"
+    if not os.path.exists(model_path):
+        raise HTTPException(status_code=404, detail="No trained model found.")
+
+    saved = joblib.load(model_path)
+    base_model = saved["model"]
+    features = saved["features"]
+    encoders = saved.get("label_encoders", {})
+
+    # If saved model is the raw XGBoost (not calibrated wrapper), use directly
+    if hasattr(base_model, "get_booster"):
+        xgb_model = base_model
+    elif hasattr(base_model, "base_model"):
+        xgb_model = base_model.base_model
+    else:
+        xgb_model = base_model
+
+    # Load a sample of employees to compute global importances
+    with Session(db_engine) as session:
+        # Use a sample to avoid loading the entire dataset if it's huge
+        # For global importance, we need a representative sample
+        statement = select(Employee).limit(500)
+        employees = session.exec(statement).all()
+    
+    if not employees:
+        raise HTTPException(status_code=404, detail="No employees found in the database.")
+
+    import pandas as pd
+    rows = []
+    for emp in employees:
+        row = {
+            "job_satisfaction": emp.job_satisfaction,
+            "work_life_balance": emp.work_life_balance,
+            "environment_satisfaction": emp.environment_satisfaction,
+            "job_involvement": emp.job_involvement,
+            "monthly_income": emp.monthly_income,
+            "years_at_company": emp.years_at_company,
+            "total_working_years": emp.total_working_years,
+            "num_companies_worked": emp.num_companies_worked,
+            "job_level": emp.job_level,
+            "years_since_last_promotion": emp.years_since_last_promotion,
+            "years_with_curr_manager": emp.years_with_curr_manager,
+            "performance_rating": emp.performance_rating,
+            "stock_option_level": emp.stock_option_level,
+            "age": emp.age,
+            "distance_from_home": emp.distance_from_home,
+            "percent_salary_hike": emp.percent_salary_hike,
+            "years_in_current_role": getattr(emp, "years_in_current_role", 0) or 0,
+            "overtime": getattr(emp, "overtime", 0) or 0,
+            "department": emp.department,
+            "job_role": emp.job_role,
+        }
+        rows.append(row)
+    
+    df = pd.DataFrame(rows)
+    df = engineer_features(df, encoders=encoders)
+    X = df[features]
+
+    # Try SHAP — fall back to feature_importances_ if SHAP unavailable
+    try:
+        import shap
+        explainer = shap.TreeExplainer(xgb_model)
+        shap_values = explainer.shap_values(X)
+        sv = shap_values.values if hasattr(shap_values, "values") else shap_values
+        importances = np.abs(sv).mean(axis=0)
+    except Exception:
+        # Fallback: use global feature importances
+        importances = xgb_model.feature_importances_
+
+    # Pair feature names with importance values and sort
+    pairs = sorted(zip(features, importances.tolist()), key=lambda x: x[1], reverse=True)
+
+    # Bucket into thirds
+    n = len(pairs)
+    third = max(1, n // 3)
+    most = [{"feature": f, "importance": round(v, 4)} for f, v in pairs[:third]]
+    moderate = [{"feature": f, "importance": round(v, 4)} for f, v in pairs[third:2*third]]
+    least = [{"feature": f, "importance": round(v, 4)} for f, v in pairs[2*third:]]
+
     return {
-        "employee_id": employee_id,
-        "method": "lime",
-        "status": "not_implemented",
-        "message": "LIME explanations are not yet available. Use /api/ml/explain/{id} for SHAP-based explanations.",
+        "method": "shap",
+        "buckets": {
+            "most_influential": most,
+            "moderately_influential": moderate,
+            "least_influential": least,
+        },
     }

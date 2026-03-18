@@ -7,7 +7,7 @@ import pandas as pd
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from backend.database import init_db
 from backend.schema import REQUIRED_COLUMNS, normalize_dataframe, build_schema_report
-from backend.upload import clean_dataframe, ingest_from_dataframe, validate_data_quality
+from backend.upload import clean_dataframe, ingest_from_dataframe
 from backend.quality_checker import check_data_quality
 from backend.ml.attrition_model import train_attrition_model
 from backend.ml.burnout_estimator import train_burnout_estimator
