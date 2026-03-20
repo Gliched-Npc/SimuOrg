@@ -3,8 +3,8 @@
 import pandas as pd
 from sqlalchemy import text
 from sqlmodel import Session
-from backend.database import engine, init_db
-from backend.models import Employee
+from backend.db.database import engine, init_db
+from backend.db.models import Employee
 
 # ── Column definitions and normalization logic live in backend/schema.py ──
 

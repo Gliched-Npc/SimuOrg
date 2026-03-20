@@ -4,13 +4,13 @@ import pandas as pd
 import joblib
 import os
 import random
-from backend.ml.productivity_decay import productivity_decay
-from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
-from backend.ml.attrition_model import engineer_features
+from backend.core.ml.productivity_decay import productivity_decay
+from backend.core.ml.burnout_estimator import burnout_threshold as burnout_fn
+from backend.core.ml.attrition_model import engineer_features
 
 # Lazy-loaded — model is loaded on first use, not at import time.
 # This allows the server to start even if no model has been trained yet.
-_QUIT_MODEL_PATH = "backend/ml/exports/quit_probability.pkl"
+_QUIT_MODEL_PATH = "backend/core/ml/exports/quit_probability.pkl"
 _quit_model_cache = None
 
 
@@ -174,7 +174,7 @@ class EmployeeAgent:
         Creates a new hire agent to replace a departed employee.
         Inherits role/department but resets tenure, stress, etc.
         """
-        from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
+        from backend.core.ml.burnout_estimator import burnout_threshold as burnout_fn
         # Create a blank instance bypassing __init__ (which expects an ORM model)
         new_agent = cls.__new__(cls)
         new_agent.employee_id                = new_id

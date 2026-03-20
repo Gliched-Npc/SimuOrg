@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from backend.ml.explain import explain_employee
 from sqlmodel import Session, select
-from backend.database import engine
-from backend.models import Employee
+from backend.db.database import engine
+from backend.db.models import Employee
 
 def test_explain():
     # Find an employee to test with

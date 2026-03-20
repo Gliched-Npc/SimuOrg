@@ -3,13 +3,13 @@
 import json
 import numpy as np
 from sqlmodel import Session, select
-from backend.database import engine
-from backend.models import Employee
-from backend.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
-from backend.simulation.org_graph import build_org_graph, OrgGraph
-from backend.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
-from backend.simulation.policies import SimulationConfig, get_policy
-from backend.ml.burnout_estimator import burnout_threshold as burnout_fn
+from backend.db.database import engine
+from backend.db.models import Employee
+from backend.core.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
+from backend.core.simulation.org_graph import build_org_graph, OrgGraph
+from backend.core.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
+from backend.core.simulation.policies import SimulationConfig, get_policy
+from backend.core.ml.burnout_estimator import burnout_threshold as burnout_fn
 
 # Lazy-loaded calibration cache — same pattern as behavior_engine.py.
 # This guarantees that after a retrain + recalibrate, the very next simulation
@@ -28,7 +28,7 @@ def _get_calibration():
     global _engine_calibration_cache
     if _engine_calibration_cache is None:
         try:
-            with open("backend/ml/exports/calibration.json") as f:
+            with open("backend/core/ml/exports/calibration.json") as f:
                 _engine_calibration_cache = json.load(f)
         except FileNotFoundError:
             _engine_calibration_cache = {

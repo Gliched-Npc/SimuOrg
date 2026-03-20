@@ -2,9 +2,9 @@
 # Run this to train all models and generate calibration in one step.
 # Usage: python -m backend.ml.train
 
-from backend.ml.attrition_model import train_attrition_model
-from backend.ml.burnout_estimator import train_burnout_estimator
-from backend.ml.calibration import calibrate
+from backend.core.ml.attrition_model import train_attrition_model
+from backend.core.ml.burnout_estimator import train_burnout_estimator
+from backend.core.ml.calibration import calibrate
 
 
 def train_all():

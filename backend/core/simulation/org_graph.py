@@ -1,7 +1,7 @@
 # backend/simulation/org_graph.py
 
 import networkx as nx
-from backend.simulation.agent import EmployeeAgent
+from backend.core.simulation.agent import EmployeeAgent
 
 
 class OrgGraph:
@@ -200,9 +200,9 @@ def build_org_graph(agents: list[EmployeeAgent]) -> OrgGraph:
 
 if __name__ == "__main__":
     from sqlmodel import Session, select
-    from backend.database import engine
-    from backend.models import Employee
-    from backend.simulation.agent import EmployeeAgent
+    from backend.db.database import engine
+    from backend.db.models import Employee
+    from backend.core.simulation.agent import EmployeeAgent
 
     with Session(engine) as session:
         employees = session.exec(select(Employee)).all()

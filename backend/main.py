@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api import sim_routes, upload_routes, ml_routes
-from backend.database import init_db
+from backend.db.database import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

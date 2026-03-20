@@ -3,8 +3,8 @@
 import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from backend.simulation.monte_carlo import run_monte_carlo
-from backend.simulation.policies import SimulationConfig, get_policy, POLICIES
+from backend.core.simulation.monte_carlo import run_monte_carlo
+from backend.core.simulation.policies import SimulationConfig, get_policy, POLICIES
 from backend.api.upload_routes import get_data_issues
 
 router = APIRouter(prefix="/api/sim", tags=["Simulation"])
@@ -32,10 +32,10 @@ def list_policies():
 async def run_simulation_endpoint(request: SimulationRequest):
     import os
     from sqlmodel import Session, select
-    from backend.database import engine
-    from backend.models import Employee
+    from backend.db.database import engine
+    from backend.db.models import Employee
 
-    if not os.path.exists("backend/ml/exports/quit_probability.pkl"):
+    if not os.path.exists("backend/core/ml/exports/quit_probability.pkl"):
         raise HTTPException(
             status_code=400,
             detail="No trained model found. Please upload a dataset first via POST /api/upload/dataset."

@@ -11,8 +11,8 @@ from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.isotonic import IsotonicRegression
 
-from backend.database import engine
-from backend.models import Employee
+from backend.db.database import engine
+from backend.db.models import Employee
 
 # ── Features ──
 # Driven strictly by the 14-column mandatory schema + engineered features.
@@ -429,7 +429,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         quality_report["trust_score"] = 100
         quality_report["cleaning_audit"] = []
 
-    os.makedirs("backend/ml/exports", exist_ok=True)
+    os.makedirs("backend/core/ml/exports", exist_ok=True)
     joblib.dump(
         {
             "model":          model.base_model,   # XGBoost base (for CV compatibility)
@@ -438,14 +438,14 @@ def train_attrition_model(pre_clean_metrics: dict = None):
             "features":       FEATURES,
             "label_encoders": LABEL_ENCODERS,
         },
-        "backend/ml/exports/quit_probability.pkl"
+        "backend/core/ml/exports/quit_probability.pkl"
     )
     # Save quality report as JSON for the /api/ml/metrics endpoint
     import json as _json
-    with open("backend/ml/exports/quality_report.json", "w") as _f:
+    with open("backend/core/ml/exports/quality_report.json", "w") as _f:
         _json.dump(quality_report, _f, indent=2)
-    print("[done] Model saved to backend/ml/exports/quit_probability.pkl")
-    print("[done] Quality report saved to backend/ml/exports/quality_report.json")
+    print("[done] Model saved to backend/core/ml/exports/quit_probability.pkl")
+    print("[done] Quality report saved to backend/core/ml/exports/quality_report.json")
     return quality_report
 
 

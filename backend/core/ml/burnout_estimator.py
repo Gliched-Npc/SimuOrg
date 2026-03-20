@@ -4,8 +4,8 @@ import pandas as pd
 import joblib
 import os
 from sqlmodel import Session, select
-from backend.database import engine
-from backend.models import Employee
+from backend.db.database import engine
+from backend.db.models import Employee
 
 
 def burnout_threshold(job_level: int, total_working_years: float) -> float:
@@ -42,9 +42,9 @@ def train_burnout_estimator():
     print(f"  Manager L4 (15yr)  : {burnout_threshold(4, 15)}")
     print(f"  Director L5 (20yr) : {burnout_threshold(5, 20)}")
 
-    os.makedirs("backend/ml/exports", exist_ok=True)
-    joblib.dump(burnout_threshold, "backend/ml/exports/burnout_threshold.pkl")
-    print("[done] Saved to backend/ml/exports/burnout_threshold.pkl")
+    os.makedirs("backend/core/ml/exports", exist_ok=True)
+    joblib.dump(burnout_threshold, "backend/core/ml/exports/burnout_threshold.pkl")
+    print("[done] Saved to backend/core/ml/exports/burnout_threshold.pkl")
 
 
 if __name__ == "__main__":

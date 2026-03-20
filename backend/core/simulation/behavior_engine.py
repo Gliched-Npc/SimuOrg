@@ -1,7 +1,7 @@
 # backend/simulation/behavior_engine.py
 
-from backend.simulation.agent import EmployeeAgent
-from backend.simulation.org_graph import build_org_graph, OrgGraph
+from backend.core.simulation.agent import EmployeeAgent
+from backend.core.simulation.org_graph import build_org_graph, OrgGraph
 import json
 
 _calibration_cache = None
@@ -11,7 +11,7 @@ def _load_calibration():
     global _calibration_cache
     if _calibration_cache is None:
         try:
-            with open("backend/ml/exports/calibration.json") as f:
+            with open("backend/core/ml/exports/calibration.json") as f:
                 _calibration_cache = json.load(f)
         except FileNotFoundError:
             _calibration_cache = {

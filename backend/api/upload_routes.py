@@ -5,14 +5,14 @@ import uuid
 import threading
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
-from backend.database import init_db
+from backend.db.database import init_db
 from backend.schema import REQUIRED_COLUMNS, normalize_dataframe, build_schema_report
 from backend.upload import clean_dataframe, ingest_from_dataframe
 from backend.quality_checker import check_data_quality
-from backend.ml.attrition_model import train_attrition_model
-from backend.ml.burnout_estimator import train_burnout_estimator
-from backend.ml.calibration import calibrate
-import backend.simulation.agent as _agent_module  # needed to bust lazy-load cache
+from backend.core.ml.attrition_model import train_attrition_model
+from backend.core.ml.burnout_estimator import train_burnout_estimator
+from backend.core.ml.calibration import calibrate
+import backend.core.simulation.agent as _agent_module  # needed to bust lazy-load cache
 
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
 

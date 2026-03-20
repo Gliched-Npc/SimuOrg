@@ -4,9 +4,9 @@ import copy
 import json
 import os
 import numpy as np
-from backend.simulation.time_engine import run_simulation, load_agents_from_db
-from backend.simulation.org_graph import build_org_graph
-from backend.simulation.policies import SimulationConfig
+from backend.core.simulation.time_engine import run_simulation, load_agents_from_db
+from backend.core.simulation.org_graph import build_org_graph
+from backend.core.simulation.policies import SimulationConfig
 
 
 def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str = "custom") -> dict:
@@ -111,7 +111,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             annual_attrition_pct = 0.0
 
         # Load calibration, if available, to anchor realism check.
-        calibration_path = "backend/ml/exports/calibration.json"
+        calibration_path = "backend/core/ml/exports/calibration.json"
         baseline_annual_attrition = None
         if os.path.exists(calibration_path):
             try:
@@ -177,7 +177,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
 
 
 if __name__ == "__main__":
-    from backend.simulation.policies import get_policy
+    from backend.core.simulation.policies import get_policy
 
     config  = get_policy("baseline")
     results = run_monte_carlo(config, runs=10)

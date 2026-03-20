@@ -6,13 +6,13 @@ import json
 import os
 import pandas as pd
 from sqlmodel import Session, select
-from backend.database import engine
-from backend.models import Employee
-from backend.ml.burnout_estimator import burnout_threshold
-from backend.ml.attrition_model import engineer_features
+from backend.db.database import engine
+from backend.db.models import Employee
+from backend.core.ml.burnout_estimator import burnout_threshold
+from backend.core.ml.attrition_model import engineer_features
 
 
-def calibrate(save_path="backend/ml/exports/calibration.json"):
+def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     print("=== Running simulation calibration...")
 
     with Session(engine) as session:
@@ -21,7 +21,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     if not employees:
         raise ValueError("No employees found in database. Run upload/ingest first.")
 
-    model_path = "backend/ml/exports/quit_probability.pkl"
+    model_path = "backend/core/ml/exports/quit_probability.pkl"
     if not os.path.exists(model_path):
         raise ValueError(
             f"Quit probability model not found at '{model_path}'. "
@@ -168,7 +168,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     # (stress_gain_rate * baseline_policy_stress_gain_rate) - recovery_rate per month
     #
     # baseline_policy_stress_gain_rate is read from POLICIES["baseline"] — single source of truth.
-    from backend.simulation.policies import POLICIES
+    from backend.core.simulation.policies import POLICIES
     baseline_policy_sgr  = POLICIES["baseline"].stress_gain_rate  # 0.75 currently
     net_gain_per_month   = max(0.0, stress_gain_rate * baseline_policy_sgr - recovery_rate)
     initial_stresses     = np.array([
@@ -264,7 +264,7 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     }
 
 
-    os.makedirs("backend/ml/exports", exist_ok=True)
+    os.makedirs("backend/core/ml/exports", exist_ok=True)
     with open(save_path, "w") as f:
         json.dump(calibration, f, indent=2)
 
@@ -278,10 +278,10 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
     # prob_scale is fitted against pure model probability only. The amplifier is
     # a separate behavioral layer for non-baseline scenarios — mixing it into
     # calibration inflates prob_scale (was 4.69) making pressure scenarios explode.
-    from backend.simulation.time_engine import run_simulation, load_agents_from_db
-    from backend.simulation.org_graph import build_org_graph, clear_graph_cache
-    from backend.simulation.policies import SimulationConfig
-    from backend.simulation.behavior_engine import clear_calibration_cache
+    from backend.core.simulation.time_engine import run_simulation, load_agents_from_db
+    from backend.core.simulation.org_graph import build_org_graph, clear_graph_cache
+    from backend.core.simulation.policies import SimulationConfig
+    from backend.core.simulation.behavior_engine import clear_calibration_cache
     import copy
 
     # Clear caches so the engine reads the freshly written calibration.json
@@ -379,9 +379,9 @@ def calibrate(save_path="backend/ml/exports/calibration.json"):
 
     # Clear ALL engine caches so the very next simulation uses fresh values
     clear_calibration_cache()
-    from backend.simulation.time_engine import clear_engine_calibration_cache
+    from backend.core.simulation.time_engine import clear_engine_calibration_cache
     clear_engine_calibration_cache()
-    from backend.simulation.agent import clear_quit_model_cache
+    from backend.core.simulation.agent import clear_quit_model_cache
     clear_quit_model_cache()
 
     return calibration
