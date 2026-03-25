@@ -169,8 +169,6 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     #
     # baseline_policy_stress_gain_rate is read from POLICIES["baseline"] — single source of truth.
     from backend.core.simulation.policies import POLICIES
-    baseline_policy_sgr  = POLICIES["baseline"].stress_gain_rate  # 0.75 currently
-    net_gain_per_month   = max(0.0, stress_gain_rate * baseline_policy_sgr - recovery_rate)
     initial_stresses     = np.array([
         min(
             max(0.0, (4.0 - emp.job_satisfaction) / 3.0) * 0.06
@@ -179,23 +177,21 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
         )
         for emp in employees
     ])
-    baseline_stress_peak = float(np.max(initial_stresses)) + 12 * net_gain_per_month
+    
 
     # Safety margin: how far above baseline peak before amplifier fires.
     # Derived from gain/recovery ratio — volatile physics need more buffer.
     # Clamped to 1.1–1.5 range so it stays sensible.
-    gain_recovery_ratio  = stress_gain_rate / recovery_rate if recovery_rate > 0 else 2.0
-    safety_margin        = 1.0 + min(0.5, 0.1 * gain_recovery_ratio)
-    raw_threshold        = baseline_stress_peak * safety_margin
 
     # Hard ceiling: threshold can never exceed avg burnout tolerance (that would
     # make the amplifier meaningless even under extreme pressure).
     avg_burnout          = float(np.mean(burnout_limits))
-    stress_threshold     = round(min(raw_threshold, avg_burnout), 4)
+    percentile           = max(50,min(80,round(90- (stress_amplification*7))))
+    stress_threshold     = round(float(np.percentile(initial_stresses,percentile)), 4)
+    motivation_threshold = round(float(np.percentile(initial_stresses, 85)), 4)
 
     print(f"  >> stress_threshold={stress_threshold:.4f} "
-          f"(baseline_peak={baseline_stress_peak:.4f} x margin={safety_margin:.2f}, "
-          f"ceiling=avg_burnout={avg_burnout:.4f})")
+      f"(p{percentile} of initial stress dist, amp={stress_amplification})")
 
     std_burnout = float(np.std(burnout_limits))
 
@@ -234,6 +230,7 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     calibration = {
         "quit_threshold":           tuned_threshold,
         "stress_threshold":         stress_threshold,
+        "motivation_threshold":     motivation_threshold,
         "avg_quit_prob":            round(float(np.mean(quit_probs)), 4),
         "avg_burnout_limit":        round(avg_burnout, 4),
         "annual_attrition_rate":    round(annual_attrition_rate, 4),
@@ -291,23 +288,27 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     # Lean baseline config: no shocks, moderate stress — pure quit-probability measurement
     calib_config = SimulationConfig(shock_factor=0.0, stress_gain_rate=0.75, duration_months=12)
 
-    # Load agents once, deepcopy per run to guarantee isolated state each pass
+    # Load agents once, and build graph once. Deepcopy per run.
     calib_agents_base = load_agents_from_db()
+    calib_G_base      = build_org_graph(calib_agents_base)
 
     def _run_full_sim_rate(ps, seed=42):
         """Run one calibration_run simulation with a given prob_scale.
         Returns the period attrition rate (fraction, not %).
-        stress_amplification_override=0.0 ensures prob_scale is calibrated
-        independently of the amplifier — they are separate mechanisms.
         """
         agents_copy = copy.deepcopy(calib_agents_base)
-        G_copy      = build_org_graph(agents_copy)
+        G_copy      = copy.deepcopy(calib_G_base)
+        
+        id_to_copy = {a.employee_id: a for a in agents_copy}
+        for node_id in G_copy.nodes():
+            if node_id in id_to_copy:
+                G_copy.nodes[node_id]["agent"] = id_to_copy[node_id]
+
         result      = run_simulation(
             calib_config, agents=agents_copy, G=G_copy,
             policy_name="calibration_run",
             seed=seed,
-            prob_scale_override=ps,
-            stress_amplification_override=0.0,  # decouple amplifier from calibration
+            prob_scale_override=ps
         )
         return result["summary"].get("period_attrition_pct", 0.0) / 100.0
 
@@ -342,6 +343,8 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
         if abs(error) <= CONVERGENCE_TOL:
             print(f"  [Converged] within {CONVERGENCE_TOL*100:.1f}% tolerance after {i+1} passes")
             converged = True
+            emp_lo = mid
+            emp_hi = mid
             break
 
     if not converged:

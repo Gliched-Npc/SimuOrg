@@ -41,10 +41,10 @@ POLICIES = {
     ),
 
     "kpi_pressure": SimulationConfig(
-        workload_multiplier=1.35,      # THE GRIND: High workload
-        motivation_decay_rate=0.006,   
+        workload_multiplier=1.20,      # THE GRIND: High workload
+        motivation_decay_rate=0.005,   
         shock_factor=0.10,
-        stress_gain_rate=1.1,          # Manageable stress increase
+        stress_gain_rate=1.0,          # Manageable stress increase
     ),
 
     "hiring_freeze": SimulationConfig(

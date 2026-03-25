@@ -2,26 +2,20 @@
 
 import io
 import uuid
-import threading
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from backend.db.database import init_db
 from backend.schema import REQUIRED_COLUMNS, normalize_dataframe, build_schema_report
 from backend.upload import clean_dataframe, ingest_from_dataframe
 from backend.quality_checker import check_data_quality
-from backend.core.ml.attrition_model import train_attrition_model
-from backend.core.ml.burnout_estimator import train_burnout_estimator
-from backend.core.ml.calibration import calibrate
-import backend.core.simulation.agent as _agent_module  # needed to bust lazy-load cache
+from backend.workers.tasks import run_training_task
+from backend.db.models import SimulationJob
+from sqlmodel import Session
+from backend.db.database import engine
+ # needed to bust lazy-load cache
 
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
 
-# In-memory job registry.
-# Key: job_id (str UUID)
-# Value: {status, result, error}
-# Status: "training" → "calibrating" → "done" | "failed"
-_JOBS: dict[str, dict] = {}
-_JOBS_LOCK = threading.Lock()
 
 # ── Persistent data quality warnings (#19) ──
 # Stored after upload so simulation endpoints can attach them to results.
@@ -31,45 +25,6 @@ _last_data_issues: list[dict] = []
 def get_data_issues() -> list[dict]:
     """Return the quality issues from the most recent upload."""
     return _last_data_issues
-
-
-def _background_train_and_calibrate(job_id: str, quality_report: dict = None):
-    """Runs in a background thread after ingestion is complete."""
-    def _set(status=None, **kw):
-        with _JOBS_LOCK:
-            if status:
-                _JOBS[job_id]["status"] = status
-            _JOBS[job_id].update(kw)
-
-    try:
-        _set(status="training")
-        model_quality = train_attrition_model(pre_clean_metrics=quality_report)
-        train_burnout_estimator()
-        _agent_module._quit_model_cache = None  # bust lazy-load cache
-
-        _set(status="calibrating")
-        cal = calibrate()
-
-        _set(
-            status="done",
-            model={
-                "auc_roc":        model_quality.get("auc_roc"),
-                "cv_auc_mean":    model_quality.get("cv_auc_mean"),
-                "features":       model_quality.get("features_used"),
-                "signal":         model_quality.get("signal_strength"),
-                "recommendation": model_quality.get("recommendation"),
-            },
-            calibration={
-                "annual_attrition_rate": cal.get("annual_attrition_rate"),
-                "monthly_natural_rate":  cal.get("monthly_natural_rate"),
-                "quit_threshold":        cal.get("quit_threshold"),
-                "calib_quality":         cal.get("calib_quality"),
-                "calib_attrition_std":   cal.get("calib_attrition_std"),
-            },
-        )
-
-    except Exception as exc:
-        _set(status="failed", error=str(exc))
 
 
 def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
@@ -159,17 +114,18 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
-    # 5. Kick off training + calibration in a background thread.
+    # 5. Kick off training + calibration 
     job_id = str(uuid.uuid4())
-    with _JOBS_LOCK:
-        _JOBS[job_id] = {"status": "queued"}
+    with Session(engine) as session:
+        job = SimulationJob(
+            job_id=job_id,
+            job_type="training",
+            status="queued",
+        )
+        session.add(job)
+        session.commit()
 
-    thread = threading.Thread(
-        target=_background_train_and_calibrate, 
-        args=(job_id, quality_report), 
-        daemon=True
-    )
-    thread.start()
+    run_training_task.delay(job_id, quality_report)
 
     return {
         "status":       "ingested",
@@ -187,12 +143,15 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
 
 @router.get("/status/{job_id}")
 def get_training_status(job_id: str):
-    """
-    Poll this endpoint after upload to track training + calibration progress.
-    Status progression: queued → training → calibrating → done | failed
-    """
-    with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
+    import json
+    with Session(engine) as session:
+        job = session.get(SimulationJob, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
-    return {"job_id": job_id, **job}
+    result = json.loads(job.result) if job.result else None
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "error":  job.error,
+        "result": result,
+    }

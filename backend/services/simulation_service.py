@@ -1,2 +1,85 @@
 # backend/services/simulation_service.py
 # Placeholder — simulation orchestration service will go here.
+
+# Orchestration layer between API/workers and core simulation.
+# Routes and Celery tasks call this — never core directly.
+
+from backend.core.simulation.monte_carlo import run_monte_carlo
+from backend.core.simulation.policies import SimulationConfig, get_policy, POLICIES
+
+
+def run_simulation_job(
+    policy_name: str,
+    runs: int = 10,
+    duration_months: int = 12,
+) -> dict:
+    """
+    Run a Monte Carlo simulation for a given policy.
+    Returns the full result dict from run_monte_carlo.
+    """
+    if policy_name not in POLICIES:
+        raise ValueError(f"Unknown policy: {policy_name}")
+
+    config = get_policy(policy_name)
+    config.duration_months = duration_months
+
+    return run_monte_carlo(config, runs=runs, policy_name=policy_name)
+
+
+def compare_simulation_jobs(
+    policy_a: str,
+    policy_b: str,
+    runs: int = 10,
+    duration_months: int = 12,
+) -> dict:
+    """
+    Run two policies and return combined comparison result.
+    """
+    if policy_a not in POLICIES:
+        raise ValueError(f"Unknown policy: {policy_a}")
+    if policy_b not in POLICIES:
+        raise ValueError(f"Unknown policy: {policy_b}")
+
+    config_a = get_policy(policy_a)
+    config_a.duration_months = duration_months
+
+    config_b = get_policy(policy_b)
+    config_b.duration_months = duration_months
+
+    result_a = run_monte_carlo(config_a, runs=runs, policy_name=policy_a)
+    result_b = run_monte_carlo(config_b, runs=runs, policy_name=policy_b)
+
+    return {"policy_a": result_a, "policy_b": result_b}
+
+
+def run_training_job(quality_report: dict = None) -> dict:
+    """
+    Run full ML training pipeline.
+    Returns calibration result.
+    """
+    from backend.core.ml.attrition_model import train_attrition_model
+    from backend.core.ml.burnout_estimator import train_burnout_estimator
+    from backend.core.ml.calibration import calibrate
+    import backend.core.simulation.agent as _agent_module
+
+    model_quality = train_attrition_model(pre_clean_metrics=quality_report)
+    train_burnout_estimator()
+    _agent_module._quit_model_cache = None  # bust lazy-load cache
+    cal = calibrate()
+
+    return {
+        "model": {
+            "auc_roc":        model_quality.get("auc_roc"),
+            "cv_auc_mean":    model_quality.get("cv_auc_mean"),
+            "features":       model_quality.get("features_used"),
+            "signal":         model_quality.get("signal_strength"),
+            "recommendation": model_quality.get("recommendation"),
+        },
+        "calibration": {
+            "annual_attrition_rate": cal.get("annual_attrition_rate"),
+            "monthly_natural_rate":  cal.get("monthly_natural_rate"),
+            "quit_threshold":        cal.get("quit_threshold"),
+            "calib_quality":         cal.get("calib_quality"),
+            "calib_attrition_std":   cal.get("calib_attrition_std"),
+        },
+    }

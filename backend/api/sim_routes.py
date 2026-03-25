@@ -1,10 +1,9 @@
 # backend/api/sim_routes.py
 
-import asyncio
+import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from backend.core.simulation.monte_carlo import run_monte_carlo
-from backend.core.simulation.policies import SimulationConfig, get_policy, POLICIES
+from backend.core.simulation.policies import POLICIES
 from backend.api.upload_routes import get_data_issues
 
 router = APIRouter(prefix="/api/sim", tags=["Simulation"])
@@ -33,62 +32,95 @@ async def run_simulation_endpoint(request: SimulationRequest):
     import os
     from sqlmodel import Session, select
     from backend.db.database import engine
-    from backend.db.models import Employee
+    from backend.db.models import Employee, SimulationJob
+    from backend.workers.tasks import run_simulation_task
 
     if not os.path.exists("backend/core/ml/exports/quit_probability.pkl"):
-        raise HTTPException(
-            status_code=400,
-            detail="No trained model found. Please upload a dataset first via POST /api/upload/dataset."
-        )
+        raise HTTPException(status_code=400, detail="No trained model found.")
 
     with Session(engine) as session:
-        count = session.exec(select(Employee)).all()
-    if not count:
-        raise HTTPException(
-            status_code=400,
-            detail="No employee data in database. Please upload a dataset first via POST /api/upload/dataset."
-        )
+        if not session.exec(select(Employee)).all():
+            raise HTTPException(status_code=400, detail="No employee data in database.")
 
     if request.policy_name not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_name}")
 
-    config = get_policy(request.policy_name)
-    config.duration_months = request.duration_months
+    job_id = str(uuid.uuid4())
+    with Session(engine) as session:
+        session.add(SimulationJob(
+            job_id=job_id,
+            job_type="simulation",
+            status="queued",
+            policy_name=request.policy_name,
+            runs=request.runs,
+            duration_months=request.duration_months,
+        ))
+        session.commit()
 
-    # Run in a thread pool so the event loop stays free for health-checks / other requests
-    results = await asyncio.to_thread(run_monte_carlo, config, request.runs, request.policy_name)
+    run_simulation_task.delay(job_id, request.policy_name, request.runs, request.duration_months)
 
-    # Req #19: attach persistent data quality warnings if any
-    data_issues = get_data_issues()
-    if data_issues:
-        results["data_warnings"] = data_issues
+    return {
+        "job_id":   job_id,
+        "poll_url": f"/api/sim/status/{job_id}",
+        "status":   "queued",
+        "message":  "Simulation queued. Poll poll_url for status.",
+    }
 
-    return results
+
+@router.get("/status/{job_id}")
+def get_simulation_status(job_id: str):
+    import json
+    from sqlmodel import Session
+    from backend.db.database import engine
+    from backend.db.models import SimulationJob
+
+    with Session(engine) as session:
+        job = session.get(SimulationJob, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+    result = json.loads(job.result) if job.result else None
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "error":  job.error,
+        "result": result,
+    }
 
 
 @router.post("/compare")
 async def compare_policies(request: CompareRequest):
+    import json
+    from sqlmodel import Session
+    from backend.db.database import engine
+    from backend.db.models import SimulationJob
+    from backend.workers.tasks import compare_simulations_task
+
     if request.policy_a not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_a}")
     if request.policy_b not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_b}")
 
-    config_a = get_policy(request.policy_a)
-    config_a.duration_months = request.duration_months
+    job_id = str(uuid.uuid4())
+    with Session(engine) as session:
+        session.add(SimulationJob(
+            job_id=job_id,
+            job_type="comparison",
+            status="queued",
+            policy_name=f"{request.policy_a}_vs_{request.policy_b}",
+            runs=request.runs,
+            duration_months=request.duration_months,
+        ))
+        session.commit()
 
-    config_b = get_policy(request.policy_b)
-    config_b.duration_months = request.duration_months
-
-    # Run both MC simulations concurrently in the thread pool.
-    # Previously sequential: total wait = T_a + T_b (~120s for 10-run compare).
-    # Now concurrent:        total wait = max(T_a, T_b) (~60s).
-    results_a, results_b = await asyncio.gather(
-        asyncio.to_thread(run_monte_carlo, config_a, request.runs, request.policy_a),
-        asyncio.to_thread(run_monte_carlo, config_b, request.runs, request.policy_b),
+    compare_simulations_task.delay(
+        job_id, request.policy_a, request.policy_b,
+        request.runs, request.duration_months
     )
 
     return {
-        "policy_a": results_a,
-        "policy_b": results_b,
-        "data_warnings": get_data_issues() or None,
-    }
+        "job_id":   job_id,
+        "poll_url": f"/api/sim/status/{job_id}",
+        "status":   "queued",
+        "message":  "Comparison queued. Poll poll_url for status.",
+    }
+    

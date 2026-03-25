@@ -93,7 +93,7 @@ def update_agent_state(agent: EmployeeAgent,
     FATIGUE_RECOVERY_RATE  = _c("fatigue_recovery_rate", 0.01)
     FATIGUE_STRESS_TRIGGER = _c("fatigue_stress_trigger", 0.5)
     MOTIVATION_RECOVERY_RATE = _c("motivation_recovery_rate", 0.01)
-    STRESS_THRESHOLD       = _c("stress_threshold", 0.44)
+    MOTIVATION_THRESHOLD = _c("motivation_threshold", 0.15)
     WLB_STRESS_BUFFER      = _c("wlb_stress_buffer", 0.2)
     WLB_STRESS_SENSITIVITY = _c("wlb_stress_sensitivity", 1.5)
     WLB_DROP_RATE          = _c("wlb_drop_rate", 0.15)
@@ -131,7 +131,7 @@ def update_agent_state(agent: EmployeeAgent,
     # Motivation decays under stress OR high workload.
     # Exception: when overtime_bonus > 0, pay compensates for workload — no workload decay
     # until stress crosses threshold (fatigue eventually overwhelms the pay benefit).
-    if agent.stress > STRESS_THRESHOLD:
+    if agent.stress > MOTIVATION_THRESHOLD:
         agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
     elif workload_multiplier > 1.0 and overtime_bonus == 0.0:
         # High workload without pay compensation grinds motivation down
