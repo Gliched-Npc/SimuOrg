@@ -125,12 +125,9 @@ class EmployeeAgent:
             db_employee.total_working_years
         )
 
-    def get_quit_features(self):
-        """
-        Build feature dict matching exact features the model was trained on.
-        Lazy-loads the model on first call via _quit_features().
-        """
-        raw = {
+    def get_raw_quit_dict(self):
+        """Build raw feature dict matching dataset columns."""
+        return {
             "job_satisfaction":           self.job_satisfaction,
             "work_life_balance":          self.work_life_balance,
             "environment_satisfaction":   self.environment_satisfaction,
@@ -148,12 +145,17 @@ class EmployeeAgent:
             "distance_from_home":         self.distance_from_home,
             "percent_salary_hike":        self.percent_salary_hike,
             "years_in_current_role":      self.years_in_current_role,
-            # Optional — present in dict always, model uses it only if in quit_features
             "overtime":                   self.overtime,
-            # Categorical — needed so engineer_features can create *_encoded columns
             "department":                 self.department,
             "job_role":                   self.job_role,
         }
+
+    def get_quit_features(self):
+        """
+        Build feature dict matching exact features the model was trained on.
+        Lazy-loads the model on first call via _quit_features().
+        """
+        raw = self.get_raw_quit_dict()
         df = pd.DataFrame([raw])
         df = engineer_features(df, encoders=_quit_encoders())
         return df[_quit_features()]

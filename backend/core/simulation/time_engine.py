@@ -150,35 +150,46 @@ def run_simulation(
 
         # Voluntary attrition
         quitting_agents = []
-        for agent in agents:
-            if not agent.is_active or agent in layoff_agents:
-                continue
+        candidate_agents = [a for a in agents if a.is_active and a not in layoff_agents]
 
-            yearly_prob  = _quit_model().predict_proba(agent.get_quit_features())[0][1]
-            monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
+        if candidate_agents:
+            import pandas as pd
+            from backend.core.simulation.agent import _quit_features, _quit_encoders
+            from backend.core.ml.attrition_model import engineer_features
 
-            # Mid-simulation new hires (years_at_company=0) have zero-valued engineered
-            # features so the model over-scores them. Cap at new_hire_monthly_prob —
-            # derived from real short-tenure employees in calibration, same cap used
-            # in mini-sim so prob_scale stays consistent.
-            if agent.years_at_company == 0:
-                monthly_prob = min(monthly_prob, _new_hire_cap)
+            # Batch feature engineering & prediction (~50x speedup)
+            raw_data = [a.get_raw_quit_dict() for a in candidate_agents]
+            df = pd.DataFrame(raw_data)
+            df = engineer_features(df, encoders=_quit_encoders())
+            yearly_probs = _quit_model().predict_proba(df[_quit_features()])[:, 1]
 
-            # ── Survival discount (fixes month-1 initialization spike) ──
-            # Existing employees have implicitly survived years_at_company * 12 monthly
-            # quit rolls that were never simulated. A 10-yr veteran's realized
-            # monthly probability should reflect that survival. New hires (years=0)
-            # get exp(0) = 1.0 (unaffected).
-            if agent.years_at_company > 0:
-                survival_discount = np.exp(-monthly_prob * 12 * agent.years_at_company)
-                monthly_prob *= survival_discount
+            for i, agent in enumerate(candidate_agents):
+                yearly_prob  = yearly_probs[i]
+                monthly_prob = 1 - (1 - yearly_prob) ** (1 / 12)
 
-            excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
-            stress_scale   = 1.0 + _stress_amp * excess_stress  # uses override during calibration
-            effective_prob = min(1.0, monthly_prob * _prob_scale * stress_scale)
 
-            if rng.random() < effective_prob:
-                quitting_agents.append(agent)
+                # Mid-simulation new hires (years_at_company=0) have zero-valued engineered
+                # features so the model over-scores them. Cap at new_hire_monthly_prob —
+                # derived from real short-tenure employees in calibration, same cap used
+                # in mini-sim so prob_scale stays consistent.
+                if agent.years_at_company == 0:
+                    monthly_prob = min(monthly_prob, _new_hire_cap)
+
+                # ── Survival discount (fixes month-1 initialization spike) ──
+                # Existing employees have implicitly survived years_at_company * 12 monthly
+                # quit rolls that were never simulated. A 10-yr veteran's realized
+                # monthly probability should reflect that survival. New hires (years=0)
+                # get exp(0) = 1.0 (unaffected).
+                if agent.years_at_company > 0:
+                    survival_discount = np.exp(-monthly_prob * 12 * agent.years_at_company)
+                    monthly_prob *= survival_discount
+
+                excess_stress  = max(0.0, agent.stress - STRESS_THRESHOLD)
+                stress_scale   = 1.0 + _stress_amp * excess_stress  # uses override during calibration
+                effective_prob = min(1.0, monthly_prob * _prob_scale * stress_scale)
+
+                if rng.random() < effective_prob:
+                    quitting_agents.append(agent)
 
         # Process departures
         for agent in layoff_agents + quitting_agents:
@@ -290,8 +301,8 @@ def run_simulation(
     print(f"=== Simulation Summary - {policy_name.upper()}")
     print(f"{'='*50}")
     print(f"   Duration          : {config.duration_months} months")
-    print(f"   Initial Headcount : {initial_headcount}")
-    print(f"   Final Headcount   : {final_headcount}")
+    print(f"   Initial Headcount : {int(initial_headcount)}")
+    print(f"   Final Headcount   : {int(final_headcount)}")
     print(f"   Total Quits       : {total_quits}")
     print(f"   Total Layoffs     : {total_layoffs}")
     print(f"   Attrition Rate    : {period_attrition_pct:.1f}% "
