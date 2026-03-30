@@ -1,10 +1,10 @@
 # backend/api/sim_routes.py
 
 import uuid
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from backend.core.simulation.policies import POLICIES
-from backend.api.upload_routes import get_data_issues
 
 router = APIRouter(prefix="/api/sim", tags=["Simulation"])
 
@@ -13,6 +13,7 @@ class SimulationRequest(BaseModel):
     policy_name: str = "baseline"
     runs: int = Field(default=10, ge=1, le=50)
     duration_months: int = Field(default=12, ge=1, le=24)
+    seed: Optional[int] = Field(default=42, ge=0)
 
 
 class CompareRequest(BaseModel):
@@ -20,6 +21,7 @@ class CompareRequest(BaseModel):
     policy_b: str = "kpi_pressure"
     runs: int = Field(default=10, ge=1, le=50)
     duration_months: int = Field(default=12, ge=1, le=24)
+    seed: Optional[int] = Field(default=42, ge=0)
 
 
 @router.get("/policies")
@@ -54,10 +56,11 @@ async def run_simulation_endpoint(request: SimulationRequest):
             policy_name=request.policy_name,
             runs=request.runs,
             duration_months=request.duration_months,
+            seed=request.seed,
         ))
         session.commit()
 
-    run_simulation_task.delay(job_id, request.policy_name, request.runs, request.duration_months)
+    run_simulation_task.delay(job_id, request.policy_name, request.runs, request.duration_months, request.seed)
 
     return {
         "job_id":   job_id,
@@ -109,12 +112,13 @@ async def compare_policies(request: CompareRequest):
             policy_name=f"{request.policy_a}_vs_{request.policy_b}",
             runs=request.runs,
             duration_months=request.duration_months,
+            seed=request.seed,
         ))
         session.commit()
 
     compare_simulations_task.delay(
         job_id, request.policy_a, request.policy_b,
-        request.runs, request.duration_months
+        request.runs, request.duration_months, request.seed
     )
 
     return {

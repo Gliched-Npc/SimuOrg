@@ -16,7 +16,9 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     print("=== Running simulation calibration...")
 
     with Session(engine) as session:
-        employees = session.exec(select(Employee)).all()
+        employees = session.exec(
+            select(Employee).order_by(Employee.employee_id)
+        ).all()
 
     if not employees:
         raise ValueError("No employees found in database. Run upload/ingest first.")
@@ -262,8 +264,10 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
 
 
     os.makedirs("backend/core/ml/exports", exist_ok=True)
-    with open(save_path, "w") as f:
+    tmp = save_path + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(calibration, f, indent=2)
+    os.replace(tmp, save_path)
 
     print("+++ Initial calibration saved.")
     print("=== Running empirical calibration...")
@@ -373,8 +377,10 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     calibration["prob_scale_mini_sim"]    = prob_scale
     calibration["calib_quality"]          = calib_quality
     calibration["calib_attrition_std"]    = round(stability_std, 4)
-    with open(save_path, "w") as f:
+    tmp = save_path + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(calibration, f, indent=2)
+    os.replace(tmp, save_path)
 
     print("\n+++ Calibration complete:")
     for k, v in calibration.items():

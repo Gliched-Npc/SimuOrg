@@ -5,7 +5,7 @@ import numpy as np
 from sqlmodel import Session, select
 from backend.db.database import engine
 from backend.db.models import Employee
-from backend.core.simulation.agent import EmployeeAgent, _quit_model, _quit_threshold
+from backend.core.simulation.agent import EmployeeAgent, _quit_model
 from backend.core.simulation.org_graph import build_org_graph, OrgGraph
 from backend.core.simulation.behavior_engine import update_agent_state, apply_attrition_shockwave
 from backend.core.simulation.policies import SimulationConfig, get_policy
@@ -44,7 +44,9 @@ def _get_calibration():
 
 def load_agents_from_db() -> list[EmployeeAgent]:
     with Session(engine) as session:
-        all_employees = session.exec(select(Employee)).all()
+        all_employees = session.exec(
+            select(Employee).order_by(Employee.employee_id)
+        ).all()
 
     # Load all employees regardless of Attrition label.
     # Attrition="Yes" is past information used to train the ML model.

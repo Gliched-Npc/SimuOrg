@@ -32,10 +32,10 @@ def _update_job(job_id: str, status: str, result: dict = None, error: str = None
 
 
 @celery_app.task(bind=True, name="tasks.run_simulation")
-def run_simulation_task(self, job_id: str, policy_name: str, runs: int, duration_months: int):
+def run_simulation_task(self, job_id: str, policy_name: str, runs: int, duration_months: int, seed: int = 42):
     _update_job(job_id, "running")
     try:
-        result = run_simulation_job(policy_name, runs, duration_months)
+        result = run_simulation_job(policy_name, runs, duration_months, seed)
         _update_job(job_id, "completed", result=result)
         return result
     except Exception as e:
@@ -56,10 +56,10 @@ def run_training_task(self, job_id: str, quality_report: dict = None):
 
 
 @celery_app.task(bind=True, name="tasks.compare_simulations")
-def compare_simulations_task(self, job_id: str, policy_a: str, policy_b: str, runs: int, duration_months: int):
+def compare_simulations_task(self, job_id: str, policy_a: str, policy_b: str, runs: int, duration_months: int, seed: int = 42):
     _update_job(job_id, "running")
     try:
-        result = compare_simulation_jobs(policy_a, policy_b, runs, duration_months)
+        result = compare_simulation_jobs(policy_a, policy_b, runs, duration_months, seed)
         _update_job(job_id, "completed", result=result)
         return result
     except Exception as e:

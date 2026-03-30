@@ -1,8 +1,8 @@
 {
-  "quit_threshold": 0.11,
+  "quit_threshold": 0.12,
   "stress_threshold": 0.048,
   "motivation_threshold": 0.075,
-  "avg_quit_prob": 0.1636,
+  "avg_quit_prob": 0.1666,
   "avg_burnout_limit": 0.5783,
   "annual_attrition_rate": 0.1612,
   "monthly_natural_rate": 0.0145,
@@ -30,5 +30,5 @@
   "burnout_productivity_penalty": 0.9856,
   "prob_scale_mini_sim": 1.0,
   "calib_quality": "stable",
-  "calib_attrition_std": 0.0099
+  "calib_attrition_std": 0.0134
 }

@@ -14,13 +14,13 @@ class SimulationConfig:
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
     overtime_bonus:         float = 0.0
-    wlb_boost:              float = 0.0  # direct WLB lift (autonomy, flexibility, remote)
+    wlb_boost:              float = 0.0
 
 
 POLICIES = {
     "baseline": SimulationConfig(
         shock_factor=0.0,
-        stress_gain_rate=0.8,   # Standard operational friction
+        stress_gain_rate=0.8,
         motivation_decay_rate=0.005,
     ),
 
@@ -76,6 +76,13 @@ POLICIES = {
         shock_factor=0.3,
         stress_gain_rate=1.8,          # Still high stress, but lower than Hiring Freeze due to pay
         overtime_bonus=2.5,            # Strongest financial motivator
+    ),
+
+    "Gemini_policy": SimulationConfig(
+        workload_multiplier=0.8,
+        stress_gain_rate=0.7,
+        wlb_boost=0.6,
+        duration_months=3
     ),
 }
 

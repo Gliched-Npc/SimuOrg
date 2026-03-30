@@ -1,13 +1,14 @@
 # backend/api/upload_routes.py
 
 import io
+import json
 import uuid
 import pandas as pd
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from backend.db.database import init_db
-from backend.schema import REQUIRED_COLUMNS, normalize_dataframe, build_schema_report
-from backend.upload import clean_dataframe, ingest_from_dataframe
-from backend.quality_checker import check_data_quality
+from backend.schema import REQUIRED_COLUMNS, normalize_dataframe
+from backend.upload import ingest_from_dataframe
+from backend.services.report_service import build_upload_report
 from backend.workers.tasks import run_training_task
 from backend.db.models import SimulationJob
 from sqlmodel import Session
@@ -17,14 +18,6 @@ from backend.db.database import engine
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
 
 
-# ── Persistent data quality warnings (#19) ──
-# Stored after upload so simulation endpoints can attach them to results.
-_last_data_issues: list[dict] = []
-
-
-def get_data_issues() -> list[dict]:
-    """Return the quality issues from the most recent upload."""
-    return _last_data_issues
 
 
 def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
@@ -63,9 +56,12 @@ async def validate_dataset(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
 
-    schema_report = build_schema_report(df, overtime_was_present)
-    df, duplicates_removed, junk_removed, null_rates, cleaning_audit = clean_dataframe(df)
-    quality_report = check_data_quality(df, duplicates_removed, junk_removed, null_rates, cleaning_audit)
+    report = build_upload_report(df, overtime_was_present)
+    df = report["df"]
+    schema_report = report["schema_report"]
+    quality_report = report["quality_report"]
+    duplicates_removed = report["duplicates_removed"]
+    junk_removed = report["junk_removed"]
 
     return {
         "status":          "validated",
@@ -84,7 +80,6 @@ async def validate_dataset(file: UploadFile = File(...)):
 
 @router.post("/dataset")
 async def upload_dataset(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
-    global _last_data_issues
 
     # 1. Validate file
     if not file or not file.filename:
@@ -102,10 +97,13 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
         raise HTTPException(status_code=400, detail=f"Could not read CSV: {str(e)}")
 
     # 3. Schema report + clean
-    schema_report = build_schema_report(df, overtime_was_present)
-    df, duplicates_removed, junk_removed, null_rates, cleaning_audit = clean_dataframe(df)
-    quality_report = check_data_quality(df, duplicates_removed, junk_removed, null_rates, cleaning_audit)
-    _last_data_issues = quality_report["issues"]  # persist for sim_routes (#19)
+    report = build_upload_report(df, overtime_was_present)
+    df = report["df"]
+    schema_report = report["schema_report"]
+    quality_report = report["quality_report"]
+    duplicates_removed = report["duplicates_removed"]
+    junk_removed = report["junk_removed"]
+    # issues stored in DB against job_id below
 
     # 4. Ingest into DB (fast — no ML yet)
     init_db()
@@ -121,6 +119,7 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
             job_id=job_id,
             job_type="training",
             status="queued",
+            data_issues=json.dumps(quality_report["issues"]),
         )
         session.add(job)
         session.commit()

@@ -60,7 +60,9 @@ class SimulationJob(SQLModel, table=True):
     policy_name: Optional[str] = Field(default=None)
     runs:        Optional[int] = Field(default=None)
     duration_months: Optional[int] = Field(default=None)
+    seed:            Optional[int] = Field(default=None)
     created_at:  datetime = Field(default_factory=datetime.utcnow)
     updated_at:  datetime = Field(default_factory=datetime.utcnow)
+    data_issues: Optional[str] = Field(default=None)
     error:       Optional[str] = Field(default=None)
     result:      Optional[str] = Field(default=None)  # JSON string

@@ -1,9 +1,9 @@
 {
-  "auc_roc": 0.7262,
-  "cv_auc_mean": 0.8025,
-  "cv_auc_std": 0.0412,
-  "test_accuracy": 0.8027,
-  "train_accuracy": 0.9014,
+  "auc_roc": 0.738,
+  "cv_auc_mean": 0.8037,
+  "cv_auc_std": 0.0426,
+  "test_accuracy": 0.8061,
+  "train_accuracy": 0.9297,
   "features_used": 22,
   "bonus_features": [
     "overtime",
@@ -15,15 +15,15 @@
   "top_drivers": [
     {
       "feature": "total_working_years",
-      "importance": 0.0828
+      "importance": 0.0864
     },
     {
       "feature": "overtime",
-      "importance": 0.0799
+      "importance": 0.0836
     },
     {
       "feature": "satisfaction_composite",
-      "importance": 0.067
+      "importance": 0.0725
     }
   ],
   "signal_strength": "strong",

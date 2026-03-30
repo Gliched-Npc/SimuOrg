@@ -59,7 +59,9 @@ LABEL_ENCODERS: dict = {}
 
 def load_data_from_db():
     with Session(engine) as session:
-        employees = session.exec(select(Employee)).all()
+        employees = session.exec(
+            select(Employee).order_by(Employee.employee_id)
+        ).all()
     df = pd.DataFrame([e.model_dump() for e in employees])
     return df
 
@@ -69,11 +71,11 @@ def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
     encoders: pre-fitted LabelEncoders for inference (None = fit at training time).
     """
     df['stagnation_score']       = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
-    df['satisfaction_composite'] = (
-        df['job_satisfaction'] + df['work_life_balance']
-        + df['environment_satisfaction'] + df['job_involvement']
-        + df['performance_rating']
-    ) / 5
+    sat_cols = ['job_satisfaction', 'work_life_balance', 'environment_satisfaction']
+    if 'job_involvement' in df.columns: sat_cols.append('job_involvement')
+    if 'performance_rating' in df.columns: sat_cols.append('performance_rating')
+    df['satisfaction_composite'] = df[sat_cols].mean(axis=1)
+    
     df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
     df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
 

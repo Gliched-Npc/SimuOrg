@@ -12,6 +12,7 @@ def run_simulation_job(
     policy_name: str,
     runs: int = 10,
     duration_months: int = 12,
+    seed: int = 42,
 ) -> dict:
     """
     Run a Monte Carlo simulation for a given policy.
@@ -23,7 +24,7 @@ def run_simulation_job(
     config = get_policy(policy_name)
     config.duration_months = duration_months
 
-    return run_monte_carlo(config, runs=runs, policy_name=policy_name)
+    return run_monte_carlo(config, runs=runs, policy_name=policy_name, seed=seed)
 
 
 def compare_simulation_jobs(
@@ -31,6 +32,7 @@ def compare_simulation_jobs(
     policy_b: str,
     runs: int = 10,
     duration_months: int = 12,
+    seed: int = 42,
 ) -> dict:
     """
     Run two policies and return combined comparison result.
@@ -46,8 +48,8 @@ def compare_simulation_jobs(
     config_b = get_policy(policy_b)
     config_b.duration_months = duration_months
 
-    result_a = run_monte_carlo(config_a, runs=runs, policy_name=policy_a)
-    result_b = run_monte_carlo(config_b, runs=runs, policy_name=policy_b)
+    result_a = run_monte_carlo(config_a, runs=runs, policy_name=policy_a, seed=seed)
+    result_b = run_monte_carlo(config_b, runs=runs, policy_name=policy_b, seed=seed)
 
     return {"policy_a": result_a, "policy_b": result_b}
 
@@ -62,7 +64,13 @@ def run_training_job(quality_report: dict = None) -> dict:
     from backend.core.ml.calibration import calibrate
     import backend.core.simulation.agent as _agent_module
 
-    model_quality = train_attrition_model(pre_clean_metrics=quality_report)
+    pre_clean = {
+        "trust_score":    quality_report.get("trust_score", 100),
+        "cleaning_audit": quality_report.get("cleaning_audit", []),
+        "status":         quality_report.get("status", "healthy"),
+    } if quality_report else None
+
+    model_quality = train_attrition_model(pre_clean_metrics=pre_clean)
     train_burnout_estimator()
     _agent_module._quit_model_cache = None     # bust lazy-load cache
     _agent_module._quit_features_cache = None  # force reload of schema

@@ -9,7 +9,7 @@ from backend.core.simulation.org_graph import build_org_graph
 from backend.core.simulation.policies import SimulationConfig
 
 
-def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str = "custom") -> dict:
+def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str = "custom", seed: int = 42) -> dict:
     """
     Run simulation multiple times and aggregate results.
     Returns mean, min, max, std for each metric across all runs.
@@ -40,7 +40,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             if node_id in id_to_copy:
                 G_copy.nodes[node_id]["agent"] = id_to_copy[node_id]
 
-        result = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=i)
+        result = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=seed + i)
         all_logs.append(result["logs"])
         all_summaries.append(result.get("summary", {}))
 
