@@ -11,36 +11,13 @@ def translate_policy(user_text: str, calib_context: dict) -> dict:
     """
     Translates user text to a dictionary of multipliers via LLM API.
     Builds a fallback mechanism to Local Ollama if Groq fails or is rate limited.
-
-    Calibration anchors are injected into the USER message so the LLM can
-    reference actual company numbers when writing parameter justifications.
     """
-    attrition        = calib_context.get("annual_attrition_rate", 0)
-    stress_rate      = calib_context.get("behavior_stress_gain_rate", 0)
-    motivation_rate  = calib_context.get("motivation_recovery_rate", 0)
-    burnout_limit    = calib_context.get("avg_burnout_limit", 0)
-    calib_quality    = calib_context.get("calib_quality", "unknown")
-
-    # Build a richer user message that gives the LLM the calibration anchors
-    # it needs to write meaningful justifications referencing actual numbers.
-    enriched_user_message = f"""Policy description: {user_text}
-
-Company calibration context (use these exact numbers in your _justification entries):
-  - annual_attrition_rate         : {attrition*100:.2f}%   (fragile if > 15%)
-  - base_stress_gain_rate         : {stress_rate:.4f} per month  (base = 100% stress_gain_rate_multiplier)
-  - base_motivation_recovery_rate : {motivation_rate:.4f} per month  (base = 100% motivation_decay_rate_multiplier)
-  - avg_burnout_limit             : {burnout_limit:.3f}    (employees burn out when stress exceeds this)
-  - calibration_quality           : {calib_quality}
-
-When writing _justification, reference these exact values. For example:
-  "stress_gain_rate_multiplier": "Set to 2.0x. Base rate is {stress_rate:.4f}/month, so 2x = {stress_rate*2:.4f}/month."
-"""
-
-    system_instructions = SYSTEM_PROMPT + f"\n\nCompany annual attrition: {attrition*100:.1f}% — calibrate severity accordingly.\n"
-
+    attrition = calib_context.get("annual_attrition_rate", 0)
+    system_instructions = SYSTEM_PROMPT + f"\n\nCompany Profile Context:\nAnnual Attrition: {attrition*100:.1f}%\n"
+    
     messages = [
         {"role": "system", "content": system_instructions},
-        {"role": "user",   "content": enriched_user_message},
+        {"role": "user", "content": user_text}
     ]
 
     groq_api_key = os.getenv("GROQ_API_KEY")
