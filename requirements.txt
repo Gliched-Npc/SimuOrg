@@ -24,3 +24,4 @@ xgboost
 scikit-learn
 networkx
 celery[redis]
+openai>=1.10.0

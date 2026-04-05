@@ -1,6 +1,5 @@
 # backend/workers/celery_app.py
-# Placeholder — Celery application configuration will go here.
-# backend/workers/celery_app.py
+
 
 from celery import Celery
 import os

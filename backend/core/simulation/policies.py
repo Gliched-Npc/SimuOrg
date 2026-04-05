@@ -1,6 +1,8 @@
 # backend/simulation/policies.py
 
 import copy
+import os
+import json
 from dataclasses import dataclass
 
 
@@ -87,8 +89,33 @@ POLICIES = {
 }
 
 
-def get_policy(policy_name: str) -> SimulationConfig:
+def get_policy(policy_name: str, config_override: dict = None) -> SimulationConfig:
+    """
+    Return a SimulationConfig for the given policy name.
+
+    Parameters
+    ----------
+    policy_name     : name of a built-in policy or "custom"
+    config_override : if provided and policy_name == "custom", use this dict
+                      directly instead of reading from disk (preferred path)
+    """
+    if policy_name == "custom":
+        # Preferred: config dict passed in from the DB (via PolicyGenerationLog)
+        if config_override is not None:
+            return SimulationConfig(**config_override)
+        # Fallback: read from disk (legacy path, kept for backwards compat)
+        custom_path = "backend/core/simulation/custom_policy.json"
+        if os.path.exists(custom_path):
+            with open(custom_path, "r") as f:
+                data = json.load(f)
+            return SimulationConfig(**data)
+        else:
+            raise ValueError(
+                "No custom policy found. Generate one via POST /api/llm/generate "
+                "and pass the returned log_id as policy_log_id when running the simulation."
+            )
+
     if policy_name not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_name}. "
-                         f"Available: {list(POLICIES.keys())}")
+                         f"Available: {list(POLICIES.keys())} or 'custom'")
     return copy.copy(POLICIES[policy_name])

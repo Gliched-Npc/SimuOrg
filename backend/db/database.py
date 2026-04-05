@@ -27,6 +27,10 @@ def _run_migrations():
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS data_issues TEXT",
         # 2026-03-28: added seed to SimulationJob for reproducible runs
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS seed INTEGER",
+        # 2026-04-04: added policy_config to link exact params to results
+        "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS policy_config TEXT",
+        # 2026-04-04: added executive_summary for future CEO reasoning output
+        "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS executive_summary TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -37,6 +41,10 @@ def _run_migrations():
 def init_db():
     SQLModel.metadata.create_all(engine)
     _run_migrations()
+    # Restore any ML artifacts that are missing from disk but present in the DB.
+    # This makes the DB the source of truth and disk a local cache.
+    from backend.storage.storage import restore_artifacts_from_db
+    restore_artifacts_from_db()
 
 
 def get_session():

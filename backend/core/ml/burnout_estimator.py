@@ -46,6 +46,10 @@ def train_burnout_estimator():
     joblib.dump(burnout_threshold, "backend/core/ml/exports/burnout_threshold.pkl")
     print("[done] Saved to backend/core/ml/exports/burnout_threshold.pkl")
 
+    # Persist to DB so artifacts survive server restarts
+    from backend.storage.storage import save_artifact
+    save_artifact("burnout", burnout_threshold, "pkl")
+
 
 if __name__ == "__main__":
     train_burnout_estimator()

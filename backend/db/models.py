@@ -4,8 +4,6 @@ from typing import Optional
 from sqlmodel import SQLModel, Field
 import uuid as _uuid
 from datetime import datetime
-from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSONB
 
 
 class Employee(SQLModel, table=True):
@@ -61,8 +59,31 @@ class SimulationJob(SQLModel, table=True):
     runs:        Optional[int] = Field(default=None)
     duration_months: Optional[int] = Field(default=None)
     seed:            Optional[int] = Field(default=None)
-    created_at:  datetime = Field(default_factory=datetime.utcnow)
-    updated_at:  datetime = Field(default_factory=datetime.utcnow)
-    data_issues: Optional[str] = Field(default=None)
-    error:       Optional[str] = Field(default=None)
-    result:      Optional[str] = Field(default=None)  # JSON string
+    created_at:       datetime = Field(default_factory=datetime.utcnow)
+    updated_at:       datetime = Field(default_factory=datetime.utcnow)
+    data_issues:      Optional[str] = Field(default=None)
+    error:            Optional[str] = Field(default=None)
+    result:           Optional[str] = Field(default=None)   # JSON string
+    policy_config:    Optional[str] = Field(default=None)   # JSON of exact SimulationConfig used
+    executive_summary:Optional[str] = Field(default=None)   # CEO reasoning output (future)
+
+
+class MLArtifact(SQLModel, table=True):
+    """Stores ML model artifacts and calibration data so they survive server restarts."""
+    __tablename__ = "ml_artifact"
+
+    name:          str      = Field(primary_key=True)  # "quit_model" | "burnout" | "calibration" | "quality"
+    artifact_type: str      = Field(default="json")    # "pkl" | "json"
+    data:          str      = Field()                  # base64 str for pkl, raw JSON str for json
+    updated_at:    datetime = Field(default_factory=datetime.utcnow)
+
+
+class PolicyGenerationLog(SQLModel, table=True):
+    """Logs every LLM-generated policy so configs are traceable and not lost between requests."""
+    __tablename__ = "policy_generation_log"
+
+    log_id:           str      = Field(default_factory=lambda: str(_uuid.uuid4()), primary_key=True)
+    user_prompt:      str      = Field()                  # raw CEO input text
+    generated_config: str      = Field()                  # JSON of SimulationConfig
+    justification:    str      = Field(default="{}")      # JSON of LLM justification
+    created_at:       datetime = Field(default_factory=datetime.utcnow)

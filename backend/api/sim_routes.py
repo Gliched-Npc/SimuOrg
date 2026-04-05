@@ -12,15 +12,16 @@ router = APIRouter(prefix="/api/sim", tags=["Simulation"])
 class SimulationRequest(BaseModel):
     policy_name: str = "baseline"
     runs: int = Field(default=10, ge=1, le=50)
-    duration_months: int = Field(default=12, ge=1, le=24)
+    duration_months: Optional[int] = Field(default=None, ge=1, le=24)
     seed: Optional[int] = Field(default=42, ge=0)
+    policy_log_id: Optional[str] = Field(default=None)   # required when policy_name="custom"
 
 
 class CompareRequest(BaseModel):
     policy_a: str = "baseline"
     policy_b: str = "kpi_pressure"
     runs: int = Field(default=10, ge=1, le=50)
-    duration_months: int = Field(default=12, ge=1, le=24)
+    duration_months: Optional[int] = Field(default=None, ge=1, le=24)
     seed: Optional[int] = Field(default=42, ge=0)
 
 
@@ -32,9 +33,10 @@ def list_policies():
 @router.post("/run")
 async def run_simulation_endpoint(request: SimulationRequest):
     import os
+    import json
     from sqlmodel import Session, select
     from backend.db.database import engine
-    from backend.db.models import Employee, SimulationJob
+    from backend.db.models import Employee, SimulationJob, PolicyGenerationLog
     from backend.workers.tasks import run_simulation_task
 
     if not os.path.exists("backend/core/ml/exports/quit_probability.pkl"):
@@ -44,8 +46,26 @@ async def run_simulation_endpoint(request: SimulationRequest):
         if not session.exec(select(Employee)).all():
             raise HTTPException(status_code=400, detail="No employee data in database.")
 
-    if request.policy_name not in POLICIES:
+    if request.policy_name != "custom" and request.policy_name not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_name}")
+
+    # Resolve custom policy config from DB
+    resolved_policy_config: dict | None = None
+    if request.policy_name == "custom":
+        if not request.policy_log_id:
+            raise HTTPException(
+                status_code=400,
+                detail="policy_log_id is required when policy_name is 'custom'. "
+                       "Generate a policy first via POST /api/llm/generate."
+            )
+        with Session(engine) as session:
+            log = session.get(PolicyGenerationLog, request.policy_log_id)
+        if log is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"policy_log_id '{request.policy_log_id}' not found."
+            )
+        resolved_policy_config = json.loads(log.generated_config)
 
     job_id = str(uuid.uuid4())
     with Session(engine) as session:
@@ -57,10 +77,15 @@ async def run_simulation_endpoint(request: SimulationRequest):
             runs=request.runs,
             duration_months=request.duration_months,
             seed=request.seed,
+            policy_config=json.dumps(resolved_policy_config) if resolved_policy_config else None,
         ))
         session.commit()
 
-    run_simulation_task.delay(job_id, request.policy_name, request.runs, request.duration_months, request.seed)
+    run_simulation_task.delay(
+        job_id, request.policy_name, request.runs,
+        request.duration_months, request.seed,
+        resolved_policy_config,
+    )
 
     return {
         "job_id":   job_id,
@@ -98,9 +123,9 @@ async def compare_policies(request: CompareRequest):
     from backend.db.models import SimulationJob
     from backend.workers.tasks import compare_simulations_task
 
-    if request.policy_a not in POLICIES:
+    if request.policy_a != "custom" and request.policy_a not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_a}")
-    if request.policy_b not in POLICIES:
+    if request.policy_b != "custom" and request.policy_b not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_b}")
 
     job_id = str(uuid.uuid4())

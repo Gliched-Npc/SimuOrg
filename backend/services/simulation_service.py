@@ -11,18 +11,23 @@ from backend.core.simulation.policies import SimulationConfig, get_policy, POLIC
 def run_simulation_job(
     policy_name: str,
     runs: int = 10,
-    duration_months: int = 12,
+    duration_months: int | None = None,
     seed: int = 42,
+    policy_config: dict | None = None,
 ) -> dict:
     """
     Run a Monte Carlo simulation for a given policy.
     Returns the full result dict from run_monte_carlo.
+
+    policy_config: if provided and policy_name == "custom", uses this dict
+                   directly instead of reading from disk.
     """
-    if policy_name not in POLICIES:
+    if policy_name != "custom" and policy_name not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_name}")
 
-    config = get_policy(policy_name)
-    config.duration_months = duration_months
+    config = get_policy(policy_name, config_override=policy_config)
+    if duration_months is not None:
+        config.duration_months = duration_months
 
     return run_monte_carlo(config, runs=runs, policy_name=policy_name, seed=seed)
 
@@ -31,22 +36,24 @@ def compare_simulation_jobs(
     policy_a: str,
     policy_b: str,
     runs: int = 10,
-    duration_months: int = 12,
+    duration_months: int | None = None,
     seed: int = 42,
 ) -> dict:
     """
     Run two policies and return combined comparison result.
     """
-    if policy_a not in POLICIES:
+    if policy_a != "custom" and policy_a not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_a}")
-    if policy_b not in POLICIES:
+    if policy_b != "custom" and policy_b not in POLICIES:
         raise ValueError(f"Unknown policy: {policy_b}")
 
     config_a = get_policy(policy_a)
-    config_a.duration_months = duration_months
+    if duration_months is not None:
+        config_a.duration_months = duration_months
 
     config_b = get_policy(policy_b)
-    config_b.duration_months = duration_months
+    if duration_months is not None:
+        config_b.duration_months = duration_months
 
     result_a = run_monte_carlo(config_a, runs=runs, policy_name=policy_a, seed=seed)
     result_b = run_monte_carlo(config_b, runs=runs, policy_name=policy_b, seed=seed)

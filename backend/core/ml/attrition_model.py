@@ -432,22 +432,26 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         quality_report["cleaning_audit"] = []
 
     os.makedirs("backend/core/ml/exports", exist_ok=True)
-    joblib.dump(
-        {
-            "model":          model.base_model,   # XGBoost base (for CV compatibility)
-            "calibrator":     model.calibrator,   # isotonic calibrator
-            "threshold":      best_threshold,
-            "features":       FEATURES,
-            "label_encoders": LABEL_ENCODERS,
-        },
-        "backend/core/ml/exports/quit_probability.pkl"
-    )
+    model_payload = {
+        "model":          model.base_model,
+        "calibrator":     model.calibrator,
+        "threshold":      best_threshold,
+        "features":       FEATURES,
+        "label_encoders": LABEL_ENCODERS,
+    }
+    joblib.dump(model_payload, "backend/core/ml/exports/quit_probability.pkl")
     # Save quality report as JSON for the /api/ml/metrics endpoint
     import json as _json
     with open("backend/core/ml/exports/quality_report.json", "w") as _f:
         _json.dump(quality_report, _f, indent=2)
     print("[done] Model saved to backend/core/ml/exports/quit_probability.pkl")
     print("[done] Quality report saved to backend/core/ml/exports/quality_report.json")
+
+    # Persist to DB so artifacts survive server restarts
+    from backend.storage.storage import save_artifact
+    save_artifact("quit_model", model_payload, "pkl")
+    save_artifact("quality", quality_report, "json")
+
     return quality_report
 
 

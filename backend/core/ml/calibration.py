@@ -386,6 +386,10 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     for k, v in calibration.items():
         print(f"   {k}: {v}")
 
+    # Persist to DB so calibration survives server restarts
+    from backend.storage.storage import save_artifact
+    save_artifact("calibration", calibration, "json")
+
     # Clear ALL engine caches so the very next simulation uses fresh values
     clear_calibration_cache()
     from backend.core.simulation.time_engine import clear_engine_calibration_cache

@@ -140,19 +140,19 @@ def update_agent_state(agent: EmployeeAgent,
     else:
         agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
-    # Overtime pay bonus — phases out with fatigue
+    # Financial compensation (overtime pay or salary baseline bonus) — phases out with fatigue
     effective_overtime_bonus = 0.0
-    if agent.overtime == 1 and overtime_bonus > 0.0:
+    if overtime_bonus > 0.0:
         fatigue_discount = max(0.0, 1.0 - agent.fatigue)
         effective_overtime_bonus = overtime_bonus * fatigue_discount
 
     base_satisfaction = (agent.motivation * 4.0) + effective_overtime_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
 
-    # Overtime loyalty gain — being fairly compensated builds commitment.
-    # Small per-month effect but persistent: loyalty grows when overtime is paid,
-    # making well-compensated employees more likely to stay long-term.
-    if agent.overtime == 1 and overtime_bonus > 0.0:
+    # Financial loyalty gain — being fairly compensated builds commitment.
+    # Small per-month effect but persistent: loyalty grows when well compensated,
+    # making highly-paid employees more likely to stay long-term.
+    if overtime_bonus > 0.0:
         loyalty_gain = overtime_bonus * 0.003 * (1.0 - agent.fatigue)
         agent.loyalty = min(1.0, agent.loyalty + loyalty_gain)
 
