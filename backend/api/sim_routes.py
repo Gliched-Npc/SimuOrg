@@ -78,6 +78,7 @@ async def run_simulation_endpoint(request: SimulationRequest):
             duration_months=request.duration_months,
             seed=request.seed,
             policy_config=json.dumps(resolved_policy_config) if resolved_policy_config else None,
+            policy_log_id=request.policy_log_id,
         ))
         session.commit()
 

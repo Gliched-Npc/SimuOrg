@@ -7,13 +7,13 @@ def get_param_bounds(calib: dict) -> dict:
     mdr = calib.get("motivation_recovery_rate", 0.005)
     
     return {
-        "workload_multiplier":   (0.5, 1.6),
+        "workload_multiplier":   (0.4, 1.6),
         "stress_gain_rate":      (0.4 * sgr, 9.0 * sgr),
         "motivation_decay_rate": (0.3 * mdr, 10.0 * mdr),
         "shock_factor":          (0.0, 0.7),
         "layoff_ratio":          (0.0, 0.3),
         "overtime_bonus":        (0.0, 5.0),
-        "wlb_boost":             (0.0, 1.0),
+        "wlb_boost":             (-0.5, 1.0),
         "duration_months":       (1, 36),
     }
 

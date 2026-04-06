@@ -31,6 +31,8 @@ def _run_migrations():
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS policy_config TEXT",
         # 2026-04-04: added executive_summary for future CEO reasoning output
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS executive_summary TEXT",
+        # 2026-04-05: added policy_log_id to link job to LLM generation log
+        "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS policy_log_id TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

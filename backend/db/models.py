@@ -65,6 +65,7 @@ class SimulationJob(SQLModel, table=True):
     error:            Optional[str] = Field(default=None)
     result:           Optional[str] = Field(default=None)   # JSON string
     policy_config:    Optional[str] = Field(default=None)   # JSON of exact SimulationConfig used
+    policy_log_id:    Optional[str] = Field(default=None)   # Link to PolicyGenerationLog (if custom)
     executive_summary:Optional[str] = Field(default=None)   # CEO reasoning output (future)
 
 

@@ -139,10 +139,19 @@ def explain_simulation(request: ExplainRequest):
 
     sim_result    = json.loads(job.result)
     policy_config = json.loads(job.policy_config) if job.policy_config else None
+    user_intent   = None
 
-    # 4. Run the reasoning chain
+    # 3.5 Fetch original user intent if this was a custom policy run
+    if job.policy_log_id:
+        with Session(engine) as session:
+            from backend.db.models import PolicyGenerationLog
+            log = session.get(PolicyGenerationLog, job.policy_log_id)
+            if log:
+                user_intent = log.user_prompt
+
+    # 4. Run the reasoning chain with full context
     try:
-        briefing = run_reasoning_chain(sim_result, policy_config)
+        briefing = run_reasoning_chain(sim_result, policy_config, user_intent)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Reasoning chain failed: {str(e)}")
 

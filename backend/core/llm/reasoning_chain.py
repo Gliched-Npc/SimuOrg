@@ -21,7 +21,9 @@ from openai import OpenAI
 
 REASONING_SYSTEM_PROMPT = """You are a senior HR analytics advisor and organizational psychologist presenting simulation results to a company's CEO.
 
-You will be given structured data from an agent-based Monte Carlo simulation of organizational dynamics. Your job is to reason through this data in 4 clear steps and return a structured JSON executive briefing.
+You will be given structured data from an agent-based Monte Carlo simulation of organizational dynamics, along with the ORIGINAL USER INTENT (what the CEO asked for). 
+
+Your job is to reason through this data in 4 clear steps and return a structured JSON executive briefing.
 
 Your tone must be: professional, direct, data-driven, and actionable. Avoid jargon. Write as if briefing a CEO who has 5 minutes to read this.
 
@@ -29,7 +31,7 @@ You MUST return ONLY a valid JSON object. No markdown, no text outside the JSON.
 
 Required JSON structure:
 {
-  "situation": "2-3 sentence summary of what happened in the simulation — key numbers only",
+  "situation": "2-3 sentence summary of what happened — explicitly label Stress vs Attrition.",
   "performance": {
     "attrition_verdict": "improving | stable | deteriorating",
     "stress_verdict":    "improving | stable | deteriorating",
@@ -53,13 +55,18 @@ Required JSON structure:
 }
 
 SEVERITY GUIDE:
-- high: attrition > 25% annually OR stress increase > 0.15 OR headcount loss > 15%
-- medium: attrition 15-25% OR stress increase 0.08-0.15 OR headcount loss 8-15%
+- high: attrition > 25% annually OR stress increase > 0.15 OR burnout > 10%
+- medium: attrition 15-25% OR stress increase 0.08-0.15
 - low: attrition < 15% OR stress improving OR headcount stable
+
+REASONING RULES:
+1. Link every outcome to the original policy requested.
+2. If the policy backfired, call it out directly.
+3. Recommendations must ADDRESS THE CAUSE of the stress (e.g., 'revert workload increase'), not just generic retention tips.
 """
 
 
-def _build_reasoning_prompt(sim_result: dict, policy_config: dict | None) -> str:
+def _build_reasoning_prompt(sim_result: dict, policy_config: dict | None, user_intent: str | None = None) -> str:
     """
     Compress the Monte Carlo result into a focused prompt.
     Only sends the data the LLM actually needs — not the full monthly time series.
@@ -82,6 +89,8 @@ def _build_reasoning_prompt(sim_result: dict, policy_config: dict | None) -> str
     prompt = f"""
 SIMULATION BRIEF FOR CEO REVIEW
 =================================
+
+ORIGINAL GOAL / INTENT: {user_intent or "Unknown (General Scenario)"}
 
 POLICY SCENARIO: {summary.get('policy_name', 'Unknown')}
 DURATION: {summary.get('duration_months', '?')} months
@@ -113,7 +122,7 @@ Now produce the CEO executive briefing JSON as instructed.
 
 # ── Main function ──────────────────────────────────────────────────────────────
 
-def run_reasoning_chain(sim_result: dict, policy_config: dict | None = None) -> dict:
+def run_reasoning_chain(sim_result: dict, policy_config: dict | None = None, user_intent: str | None = None) -> dict:
     """
     Run the 4-step chain-of-thought reasoning over a simulation result.
 
@@ -121,13 +130,14 @@ def run_reasoning_chain(sim_result: dict, policy_config: dict | None = None) -> 
     ----------
     sim_result    : full dict returned by run_monte_carlo()
     policy_config : the SimulationConfig.__dict__ used for the run (optional)
+    user_intent   : original LLM-generated policy text (optional)
 
     Returns
     -------
     Structured dict with keys: situation, performance, comparison, risks,
     recommendation, confidence, confidence_reason, generated_at
     """
-    prompt = _build_reasoning_prompt(sim_result, policy_config)
+    prompt = _build_reasoning_prompt(sim_result, policy_config, user_intent)
 
     messages = [
         {"role": "system", "content": REASONING_SYSTEM_PROMPT},
