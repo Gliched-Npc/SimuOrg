@@ -7,6 +7,31 @@ from backend.core.llm.prompt_templates import SYSTEM_PROMPT
 from backend.core.llm.bounds import get_param_bounds, clamp
 from backend.core.simulation.policies import SimulationConfig
 
+def _mentions_layoff(text: str) -> bool:
+    keywords = [
+        "layoff", "lay off", "laid off", "redundan", "headcount reduction",
+        "headcount cut", "terminate", "termination", "let go", "job cut",
+        "retrench", "downsize", "staff reduction", "workforce reduction"
+    ]
+    return any(k in text.lower() for k in keywords)
+
+
+def _mentions_hiring_freeze(text: str) -> bool:
+    keywords = [
+        "hiring freeze", "no hiring", "pause hiring", "stop hiring",
+        "halt hiring", "freeze hiring", "no backfill", "no recruitment"
+    ]
+    return any(k in text.lower() for k in keywords)
+
+
+def _mentions_wlb_penalty(text: str) -> bool:
+    keywords = [
+        "return to office", "rto", "mandatory office", "relocation",
+        "relocate", "mandatory overtime", "longer hours", "extended hours"
+    ]
+    return any(k in text.lower() for k in keywords)
+
+
 def translate_policy(user_text: str, calib_context: dict) -> dict:
     """
     Translates user text to a dictionary of multipliers via LLM API.
@@ -59,12 +84,35 @@ def translate_policy(user_text: str, calib_context: dict) -> dict:
         except Exception as fallback_e:
             raise RuntimeError(f"Both Remote Groq and Local Ollama failed. Local Error: {fallback_e}")
 
-def build_config_from_llm_output(llm_json: dict, calib: dict) -> tuple[SimulationConfig, dict]:
+def build_config_from_llm_output(
+    llm_json: dict,
+    calib: dict,
+    user_text: str = "",
+) -> tuple[SimulationConfig, dict]:
     bounds = get_param_bounds(calib)
     sgr = calib.get("behavior_stress_gain_rate", 0.01)
     mdr = calib.get("motivation_recovery_rate", 0.005)
 
-    stress_gain = float(llm_json.get("stress_gain_rate_multiplier", 1.0)) * sgr
+    # ── Whitelist guards ───────────────────────────────────────────────────────
+    if not _mentions_layoff(user_text):
+        if float(llm_json.get("layoff_ratio", 0.0)) > 0.0:
+            print(f"[intent_parser] GUARD: layoff_ratio={llm_json['layoff_ratio']} "
+                  f"rejected — not mentioned by user. Forcing 0.0.")
+            llm_json["layoff_ratio"] = 0.0
+
+    if not _mentions_hiring_freeze(user_text):
+        if llm_json.get("hiring_active", True) is False:
+            print(f"[intent_parser] GUARD: hiring_active=false "
+                  f"rejected — not mentioned by user. Forcing true.")
+            llm_json["hiring_active"] = True
+
+    if not _mentions_wlb_penalty(user_text):
+        if float(llm_json.get("wlb_boost", 0.0)) < -0.05:
+            print(f"[intent_parser] GUARD: wlb_boost={llm_json['wlb_boost']} "
+                  f"rejected — not mentioned by user. Forcing 0.0.")
+            llm_json["wlb_boost"] = 0.0
+
+    stress_gain = float(llm_json.get("stress_gain_rate_multiplier", 1.0))
     motivation_decay = float(llm_json.get("motivation_decay_rate_multiplier", 1.0)) * mdr
 
     config = SimulationConfig(
@@ -78,7 +126,7 @@ def build_config_from_llm_output(llm_json: dict, calib: dict) -> tuple[Simulatio
         layoff_ratio          = clamp(float(llm_json.get("layoff_ratio", 0.0)),
                                       *bounds.get("layoff_ratio", (0.0, 0.3))),
         stress_gain_rate      = clamp(stress_gain,
-                                      *bounds.get("stress_gain_rate", (0.4*sgr, 9.0*sgr))),
+                                      *bounds.get("stress_gain_rate", (0.4, 9.0))),
         duration_months       = clamp(int(llm_json.get("duration_months", 12)),
                                       *bounds.get("duration_months", (1, 36))),
         overtime_bonus        = clamp(float(llm_json.get("overtime_bonus", 0.0)),

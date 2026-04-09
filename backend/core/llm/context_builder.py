@@ -1,3 +1,5 @@
+# backend/core/llm/context_builder.py
+
 def build_context(calib: dict) -> dict:
     """
     Extracts only the safe calibration anchors needed for LLM reasoning.

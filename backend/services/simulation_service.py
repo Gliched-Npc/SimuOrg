@@ -94,6 +94,7 @@ def run_training_job(quality_report: dict = None) -> dict:
         },
         "calibration": {
             "annual_attrition_rate": cal.get("annual_attrition_rate"),
+            "empirical_attrition_rate": cal.get("empirical_attrition_rate"),
             "monthly_natural_rate":  cal.get("monthly_natural_rate"),
             "quit_threshold":        cal.get("quit_threshold"),
             "calib_quality":         cal.get("calib_quality"),

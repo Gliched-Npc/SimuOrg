@@ -1,3 +1,5 @@
+# backend/core/llm/bounds.py
+
 def get_param_bounds(calib: dict) -> dict:
     """
     Defines the safe minimum and maximum bounds for LLM-generated configurations.
@@ -8,7 +10,7 @@ def get_param_bounds(calib: dict) -> dict:
     
     return {
         "workload_multiplier":   (0.4, 1.6),
-        "stress_gain_rate":      (0.4 * sgr, 9.0 * sgr),
+        "stress_gain_rate":      (0.4, 9.0),
         "motivation_decay_rate": (0.3 * mdr, 10.0 * mdr),
         "shock_factor":          (0.0, 0.7),
         "layoff_ratio":          (0.0, 0.3),

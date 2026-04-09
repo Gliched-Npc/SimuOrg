@@ -46,8 +46,7 @@ class Employee(SQLModel, table=True):
     overtime: Optional[int] = Field(default=0)
     
 
-    class Config:
-        populate_by_name = True
+    model_config = {"populate_by_name": True}
 
 class SimulationJob(SQLModel, table=True):
     __tablename__ = "simulation_job"

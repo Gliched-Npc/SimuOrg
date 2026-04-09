@@ -247,6 +247,71 @@ Output:
   }
 }
 
+User: "increase workload by 25%"
+Output:
+{
+  "workload_multiplier": 1.25,
+  "stress_gain_rate_multiplier": 2.5,
+  "motivation_decay_rate_multiplier": 1.5,
+  "shock_factor": 0.1,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "overtime_bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "workload_multiplier": "1.25 — explicit 25% workload increase",
+    "stress_gain_rate_multiplier": "2.5x — elevated pressure from higher load",
+    "motivation_decay_rate_multiplier": "1.5x — sustained overwork gradually erodes morale",
+    "shock_factor": "0.1 — mild contagion, some peer discussion about increased workload",
+    "hiring_active": "true — workload increase does NOT imply hiring freeze",
+    "layoff_ratio": "0.0 — user did not mention layoffs, redundancies, or headcount cuts",
+    "wlb_boost": "0.0 — no schedule or flexibility change mentioned"
+  }
+}
+
+User: "layoffs — 15% of staff cut"
+Output:
+{
+  "workload_multiplier": 1.0,
+  "stress_gain_rate_multiplier": 2.0,
+  "motivation_decay_rate_multiplier": 3.0,
+  "shock_factor": 0.5,
+  "hiring_active": false,
+  "layoff_ratio": 0.15,
+  "duration_months": 12,
+  "overtime_bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "stress_gain_rate_multiplier": "2.0x — fear of job loss increases stress",
+    "motivation_decay_rate_multiplier": "3.0x — uncertainty and survivor guilt reduce morale",
+    "shock_factor": "0.5 — layoffs create significant fear contagion",
+    "hiring_active": "false — layoffs imply hiring freeze or reduced hiring",
+    "layoff_ratio": "0.15 — explicit 15% reduction in workforce"
+  }
+}
+
+User: "layoffs — 15% of staff cut, but company announces 20% raises for remaining employees"
+Output:
+{
+  "workload_multiplier": 1.0,
+  "stress_gain_rate_multiplier": 1.5,
+  "motivation_decay_rate_multiplier": 1.0,
+  "shock_factor": 0.3,
+  "hiring_active": false,
+  "layoff_ratio": 0.15,
+  "duration_months": 12,
+  "overtime_bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "stress_gain_rate_multiplier": "1.5x — layoffs increase stress, but raises mitigate it",
+    "motivation_decay_rate_multiplier": "1.0x — financial security offsets morale drop",
+    "shock_factor": "0.3 — mixed signals create moderate uncertainty",
+    "hiring_active": "false — layoffs imply hiring freeze",
+    "layoff_ratio": "0.15 — explicit 15% reduction in workforce"
+  }
+}
+
 ---
 STRESS & BURNOUT CORRELATION RULES:
 Workload and Morale are NOT independent. Use these strict logic rules:
@@ -1287,4 +1352,12 @@ CRITICAL INSTRUCTIONS:
 6. For compound policies with opposing forces (e.g., layoffs + raise), do NOT average the multipliers. Identify the DOMINANT signal and anchor to it, then apply partial offsets from the secondary signal.
 7. wlb_boost can be NEGATIVE (range -0.5 to 0.0) for policies that actively degrade work-life balance such as forced RTO, relocation, or mandatory long hours.
 8. shock_factor is 0.0 for purely positive policies — positive news does not create fear contagion.
+9. NEVER set layoff_ratio > 0.0 unless the user explicitly mentions layoffs, headcount reduction,
+   redundancies, terminations, or job cuts. A workload increase alone does NOT imply layoffs.
+10. NEVER set hiring_active: false unless the user explicitly mentions a hiring freeze, hiring pause,
+    or stopping recruitment. A workload increase alone does NOT imply a hiring freeze.
+11. NEVER set wlb_boost negative unless the user explicitly mentions forced RTO, mandatory relocation,
+    or longer mandatory hours with no schedule flexibility.
+12. Do NOT infer unstated parameters from context. If the user only mentions workload, only change
+    workload-related fields. Leave everything else at neutral defaults.
 """

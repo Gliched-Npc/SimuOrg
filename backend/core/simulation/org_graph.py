@@ -172,29 +172,34 @@ class OrgGraph:
 # Global cache for Monte Carlo speedups
 _cached_template_graph = None
 _cached_agents_count = 0
+_cached_dataset_id = None
 
 def clear_graph_cache():
     global _cached_template_graph
     global _cached_agents_count
+    global _cached_dataset_id
     _cached_template_graph = None
     _cached_agents_count = 0
+    _cached_dataset_id = None
 
-def build_org_graph(agents: list[EmployeeAgent]) -> OrgGraph:
+def build_org_graph(agents: list[EmployeeAgent], dataset_id: str = None) -> OrgGraph:
     """
     Retains original function signature for compatibility but returns an OrgGraph wrapper.
     Implements a caching mechanism so Monte Carlo is significantly faster.
     """
     global _cached_template_graph
     global _cached_agents_count
+    global _cached_dataset_id
     
     # Use cached template if number of agents hasn't changed (typical across MC initialisations)
-    if _cached_template_graph is not None and len(agents) == _cached_agents_count:
+    if _cached_template_graph is not None and len(agents) == _cached_agents_count and dataset_id == _cached_dataset_id:
         return OrgGraph(agents=agents, template_graph=_cached_template_graph)
     
     # Otherwise build from scratch and cache the NetworkX graph as template
     org_graph = OrgGraph(agents=agents)
     _cached_template_graph = org_graph.G.copy()
     _cached_agents_count = len(agents)
+    _cached_dataset_id = dataset_id
     return org_graph
 
 

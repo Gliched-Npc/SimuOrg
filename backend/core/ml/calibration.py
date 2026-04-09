@@ -12,7 +12,7 @@ from backend.core.ml.burnout_estimator import burnout_threshold
 from backend.core.ml.attrition_model import engineer_features
 
 
-def calibrate(save_path="backend/core/ml/exports/calibration.json"):
+def calibrate(save_path="backend/core/ml/exports/calibration.json", stress_amplification_override=None):
     print("=== Running simulation calibration...")
 
     with Session(engine) as session:
@@ -133,6 +133,9 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
         stress_amplification = round(float(min(max(raw_stress_amp, 1.0), 5.0)), 4)
     else:
         stress_amplification = 2.0
+
+    if stress_amplification_override is not None:
+        stress_amplification = float(stress_amplification_override)
 
     avg_job_satisfaction  = np.mean([emp.job_satisfaction for emp in employees])
     avg_work_life_balance = np.mean([emp.work_life_balance for emp in employees])
@@ -377,6 +380,7 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json"):
     calibration["prob_scale_mini_sim"]    = prob_scale
     calibration["calib_quality"]          = calib_quality
     calibration["calib_attrition_std"]    = round(stability_std, 4)
+    calibration["empirical_attrition_rate"] = round(stability_mean, 4)
     tmp = save_path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(calibration, f, indent=2)

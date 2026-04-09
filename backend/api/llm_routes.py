@@ -10,6 +10,7 @@ from backend.core.llm.context_builder import build_context
 from backend.core.llm.intent_parser import translate_policy, build_config_from_llm_output
 from backend.db.database import engine
 from backend.db.models import PolicyGenerationLog
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/llm", tags=["LLM Services"])
 
@@ -43,7 +44,7 @@ def generate_policy(request: PolicyRequest):
         raw_llm_json = translate_policy(request.description, context)
 
         # 4. Build config and clamp according to bounds
-        config, justification = build_config_from_llm_output(raw_llm_json, calib_data)
+        config, justification = build_config_from_llm_output(raw_llm_json, calib_data, request.description)
 
         # 5. Log to DB — replaces the shared custom_policy.json disk file
         with Session(engine) as session:
@@ -160,7 +161,7 @@ def explain_simulation(request: ExplainRequest):
         job = session.get(SimulationJob, request.job_id)
         if job:
             job.executive_summary = json.dumps(briefing)
-            job.updated_at        = datetime.utcnow()
+            job.updated_at        = datetime.now(timezone.utc)
             session.add(job)
             session.commit()
 

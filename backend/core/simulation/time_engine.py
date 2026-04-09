@@ -194,7 +194,8 @@ def run_simulation(
                     quitting_agents.append(agent)
 
         # Process departures
-        for agent in layoff_agents + quitting_agents:
+        departed_agents = list(dict.fromkeys(layoff_agents + quitting_agents))
+        for agent in departed_agents:
             apply_attrition_shockwave(agent, G, config.shock_factor)
             agent.is_active = False
             # G.remove_node() intentionally omitted: removing nodes permanently
