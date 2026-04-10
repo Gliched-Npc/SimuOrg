@@ -86,7 +86,7 @@ def _classify_scenario(config: dict, results: list) -> dict:
     hiring          = config.get("hiring_active", True)
     shock           = config.get("shock_factor", 0) or 0
     wlb             = config.get("wlb_boost", 0) or 0
-    overtime        = config.get("overtime_bonus", 0) or 0
+    overtime        = config.get("bonus", 0) or 0
 
     # Compute total layoffs from data (more reliable than config alone)
     total_layoffs = sum((_safe_mean(r, "layoff_count") or 0) for r in results)
@@ -578,8 +578,8 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         lines.append(f"  Layoffs          : {config['layoff_ratio']*100:.0f}% of workforce laid off")
     if config.get("wlb_boost", 0):
         lines.append(f"  WLB boost        : +{config['wlb_boost']} points — schedule/flexibility improvement")
-    if config.get("overtime_bonus", 0):
-        lines.append(f"  Overtime bonus   : {config['overtime_bonus']} — financial compensation lever active")
+    if config.get("bonus", 0):
+        lines.append(f"  Overtime bonus   : {config['bonus']} — financial compensation lever active")
     if not config.get("hiring_active", True):
         lines.append("  Hiring           : FROZEN — no backfill for exits")
     if config.get("shock_factor", 0) > 0.3:

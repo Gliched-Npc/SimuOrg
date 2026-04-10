@@ -12,7 +12,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": -0.5,
   "_justification": {
     "workload_multiplier": "1.1 — commute time and context-switching create effective overload",
@@ -37,7 +37,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.2,
   "_justification": {
     "stress_gain_rate_multiplier": "0.85x — partial autonomy retained, commute burden reduced",
@@ -60,7 +60,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — role ambiguity and transition overhead increases effective load",
@@ -86,7 +86,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.1 — coordination overhead and duplicate processes during transition",
@@ -110,7 +110,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.15 — anticipatory tightening, teams overperform to avoid cuts",
@@ -136,7 +136,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — micromanagement increases perceived and actual task overhead",
@@ -160,7 +160,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "1.5x — cultural continuity concern despite internal successor; uncertainty is real but muted",
@@ -184,7 +184,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.15 — employees overwork to avoid being in the bottom 10%",
@@ -208,7 +208,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.05 — feedback administration overhead is real but minor",
@@ -231,7 +231,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — integration projects, duplicate process reconciliation, reporting overhead",
@@ -256,7 +256,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.08,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.3 — survivors absorb eliminated roles",
@@ -282,7 +282,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": -0.4,
   "_justification": {
     "workload_multiplier": "1.1 — commute time becomes a real productivity and energy drain",
@@ -307,7 +307,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.7,
   "_justification": {
     "workload_multiplier": "0.8 — 20% fewer working days, direct load reduction",
@@ -332,7 +332,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.3,
   "_justification": {
     "workload_multiplier": "1.1 — same hours compressed means less buffer; cognitive load per day increases",
@@ -356,12 +356,12 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 1.0,
+  "bonus": 1.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "0.85x — financial upside reduces anxiety, mild stress relief",
     "motivation_decay_rate_multiplier": "0.4x — ownership stake creates strong long-term retention anchor; employees feel invested in outcomes",
-    "overtime_bonus": "1.0 — equity is a non-cash financial lever; maps to mid-range compensation signal",
+    "bonus": "1.0 — equity is a non-cash financial lever; maps to mid-range compensation signal",
     "wlb_boost": "0.0 — equity does not affect schedule or day-to-day workload"
   }
 }
@@ -380,7 +380,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "2.0x — cancellation signals financial instability, job security concern",
@@ -403,7 +403,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — existing employees carry load while new hires ramp up; onboarding overhead",
@@ -427,7 +427,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "1.3x — removal of perks signals financial distress, mild existential concern",
@@ -450,7 +450,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.15 — productivity loss from inferior tooling increases time-to-complete for same tasks",
@@ -473,7 +473,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.5,
   "_justification": {
     "workload_multiplier": "0.9 — employees take more recovery time, slightly reducing sustained workload",
@@ -497,7 +497,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.3,
   "_justification": {
     "workload_multiplier": "0.95 — 8 additional recovery days per year modestly reduces sustained load",
@@ -521,7 +521,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.1,
   "_justification": {
     "stress_gain_rate_multiplier": "0.85x — safety net reduces anxiety about personal and financial issues that bleed into work",
@@ -544,7 +544,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.4,
   "_justification": {
     "workload_multiplier": "1.05 — coverage gap when employees take leave adds marginal load on remaining team",
@@ -568,7 +568,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.05 — mentorship sessions add minor time overhead",
@@ -591,7 +591,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "0.9x — recognition culture mildly reduces anxiety and competitive tension",
@@ -613,7 +613,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "0.85x — career path clarity reduces anxiety about future and fairness",
@@ -635,7 +635,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.1,
   "duration_months": 12,
-  "overtime_bonus": 1.5,
+  "bonus": 1.5,
   "wlb_boost": 0.3,
   "_justification": {
     "workload_multiplier": "1.25 — survivors absorb departed work despite compensation uplift",
@@ -643,7 +643,7 @@ Output:
     "motivation_decay_rate_multiplier": "1.5x — 15% raise + WFH partially offsets survivor guilt but cannot fully counter it",
     "shock_factor": "0.4 — departures are visible; raise cushions but does not eliminate contagion",
     "layoff_ratio": "0.1 — explicitly stated 10% reduction",
-    "overtime_bonus": "1.5 — 15% raise maps to strong financial retention signal",
+    "bonus": "1.5 — 15% raise maps to strong financial retention signal",
     "wlb_boost": "0.3 — WFH option adds meaningful but not maximum WLB benefit"
   }
 }
@@ -662,14 +662,14 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 18,
-  "overtime_bonus": 0.8,
+  "bonus": 0.8,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — hiring freeze means no backfill; load increases over 18 months",
     "stress_gain_rate_multiplier": "2.5x — dual freeze signals stagnation; raise does not address growth anxiety",
     "motivation_decay_rate_multiplier": "2.5x — promotion freeze is the dominant driver; 8% raise is appreciated but career stagnation overrides financial comfort for growth-oriented employees",
     "shock_factor": "0.3 — high performers most likely to exit; their departures visible to peers",
-    "overtime_bonus": "0.8 — 8% raise sits between CoL (0.5) and strong retention signal (1.5)",
+    "bonus": "0.8 — 8% raise sits between CoL (0.5) and strong retention signal (1.5)",
     "duration_months": "18 — explicitly stated"
   }
 }
@@ -688,7 +688,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 3,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "0.9 — explicit 10% reduction in scope/tasks",
@@ -713,7 +713,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.1,
   "_justification": {
     "workload_multiplier": "0.8 — 20% explicit reduction, sustained",
@@ -737,7 +737,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 6,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.15,
   "_justification": {
     "workload_multiplier": "0.7 — significant scope reduction, post-crunch recovery mode",
@@ -761,7 +761,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.2,
   "_justification": {
     "workload_multiplier": "0.5 — 50% reduction to maintenance-only pace",
@@ -787,7 +787,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 3,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.25,
   "_justification": {
     "workload_multiplier": "0.4 — extreme reduction; skeleton operations only",
@@ -813,7 +813,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.1,
   "_justification": {
     "stress_gain_rate_multiplier": "0.85x — regular social bonding provides a recurring stress buffer",
@@ -836,7 +836,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.25,
   "_justification": {
     "workload_multiplier": "0.95 — offsite days are breaks from normal work; slight effective load reduction",
@@ -860,12 +860,12 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.8,
+  "bonus": 0.8,
   "wlb_boost": 0.05,
   "_justification": {
     "stress_gain_rate_multiplier": "0.8x — anticipation of reward reduces stress during crunch; post-delivery relief resets baseline",
     "motivation_decay_rate_multiplier": "0.5x — recognized outcomes are the single strongest intrinsic motivator; effort → reward loop retains motivation powerfully",
-    "overtime_bonus": "0.8 — project bonus maps to modest but meaningful financial reward signal",
+    "bonus": "0.8 — project bonus maps to modest but meaningful financial reward signal",
     "wlb_boost": "0.05 — celebration dinner is a minor social WLB gain, not a structural change"
   }
 }
@@ -884,7 +884,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.05,
   "_justification": {
     "stress_gain_rate_multiplier": "0.9x — weekly social ritual provides a small but consistent stress buffer",
@@ -907,7 +907,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.1,
   "_justification": {
     "workload_multiplier": "0.95 — 2 days of creative freedom away from normal work reduces effective annual load marginally",
@@ -931,7 +931,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.15,
   "_justification": {
     "stress_gain_rate_multiplier": "0.8x — physical exercise is one of the most evidence-backed stress reducers; sustained effect for active users",
@@ -954,7 +954,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.1,
   "_justification": {
     "stress_gain_rate_multiplier": "0.9x — removal of daily friction (lunch planning, cost, time) reduces low-grade daily stress",
@@ -977,12 +977,12 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 1.0,
+  "bonus": 1.0,
   "wlb_boost": 0.05,
   "_justification": {
     "stress_gain_rate_multiplier": "0.8x — annual celebration provides a strong year-end emotional reset",
     "motivation_decay_rate_multiplier": "0.5x — cash bonus is the dominant signal here; party amplifies the recognition but bonus drives the retention effect",
-    "overtime_bonus": "1.0 — year-end cash bonus is a meaningful mid-range financial reward",
+    "bonus": "1.0 — year-end cash bonus is a meaningful mid-range financial reward",
     "wlb_boost": "0.05 — party is social, not structural WLB change"
   }
 }
@@ -1001,7 +1001,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.05 — learning activities add marginal time overhead on top of regular work",
@@ -1024,7 +1024,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.08,
   "_justification": {
     "stress_gain_rate_multiplier": "0.88x — animal presence measurably reduces cortisol; the effect is real but bounded to Fridays",

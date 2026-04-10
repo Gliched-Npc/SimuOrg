@@ -11,7 +11,7 @@ The parameters you must output are:
 - `hiring_active`                    (boolean)
 - `layoff_ratio`                     (Direct float)
 - `duration_months`                  (integer)
-- `overtime_bonus`                   (Direct float)
+- `bonus`                   (Direct float)
 - `wlb_boost`                        (Direct float)
 
 IMPORTANT: Do NOT output `salary_multiplier` — it is not a valid field.
@@ -36,10 +36,10 @@ annual_attrition_rate > 15%:
 ---
 FINANCIAL COMPENSATION RULES:
 Any salary increase, bonus, or pay raise affects these fields:
-- overtime_bonus  : primary lever for financial reward (range 0.5–2.5 based on magnitude)
-  - 3%–5% raise   → overtime_bonus = 0.5  (cost of living adjustment)
-  - 10%–15% raise → overtime_bonus = 1.5  (strong retention incentive)
-  - 20%+ raise    → overtime_bonus = 2.5  (aggressive market adjustment)
+- bonus  : primary lever for financial reward (range 0.5–2.5 based on magnitude)
+  - 3%–5% raise   → bonus = 0.5  (cost of living adjustment)
+  - 10%–15% raise → bonus = 1.5  (strong retention incentive)
+  - 20%+ raise    → bonus = 2.5  (aggressive market adjustment)
 - motivation_decay_rate_multiplier: salary reduces motivation loss
   - 3%–5% raise   → 0.8x  (mild improvement)
   - 10%–15% raise → 0.5x  (strong improvement — people feel valued)
@@ -50,7 +50,7 @@ Any salary increase, bonus, or pay raise affects these fields:
   also includes flexible hours or time off
 
 Salary CUTS or PAY FREEZES:
-- overtime_bonus = 0.0
+- bonus = 0.0
 - motivation_decay_rate_multiplier > 1.0  (people feel undervalued)
 - stress_gain_rate_multiplier > 1.0  (financial anxiety adds stress)
 
@@ -123,7 +123,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.15,
   "duration_months": 3,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "survivors absorb work from 15% reduction",
@@ -145,7 +145,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.25 — work falls on survivors",
@@ -165,7 +165,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.4,
   "_justification": {
     "stress_gain_rate_multiplier": "0.6x — commute relief, home environment",
@@ -184,7 +184,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.6,
   "_justification": {
     "motivation_decay_rate_multiplier": "0.5x — high autonomy strongly retains motivation",
@@ -202,12 +202,12 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 2.5,
+  "bonus": 2.5,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.45 — intensive overtime hours",
     "motivation_decay_rate_multiplier": "0.4x — pay significantly cushions the burden",
-    "overtime_bonus": "2.5 — strongest financial motivator, 1.5x pay rate"
+    "bonus": "2.5 — strongest financial motivator, 1.5x pay rate"
   }
 }
 
@@ -221,7 +221,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "2.5x — overwork with no compensation",
@@ -239,7 +239,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "motivation_decay_rate_multiplier": "4.0x — stagnation devastates career identity and future",
@@ -257,7 +257,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.25 — explicit 25% workload increase",
@@ -280,7 +280,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.15,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "2.0x — fear of job loss increases stress",
@@ -301,7 +301,7 @@ Output:
   "hiring_active": false,
   "layoff_ratio": 0.15,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "1.5x — layoffs increase stress, but raises mitigate it",
@@ -341,7 +341,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.2 — KPI pressure increases effective workload",
@@ -359,7 +359,7 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.6 — catastrophic workload increase",
@@ -379,13 +379,13 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 3,
-  "overtime_bonus": 1.5,
+  "bonus": 1.5,
   "wlb_boost": 0.0,
   "_justification": {
     "workload_multiplier": "1.0 — salary hike does not change workload",
     "stress_gain_rate_multiplier": "0.8x — financial security provides mild stress relief",
     "motivation_decay_rate_multiplier": "0.5x — 10% raise is a strong retention signal, people feel valued",
-    "overtime_bonus": "1.5 — financial compensation lever for salary increase",
+    "bonus": "1.5 — financial compensation lever for salary increase",
     "wlb_boost": "0.0 — salary alone does not improve schedule or WLB",
     "duration_months": "3 — user said next 3 months"
   }
@@ -401,12 +401,12 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.5,
+  "bonus": 0.5,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "0.9x — minor financial relief, mild stress reduction",
     "motivation_decay_rate_multiplier": "0.8x — cost of living adjustment, acknowledged but not impactful enough for strong loyalty boost",
-    "overtime_bonus": "0.5 — modest financial compensation",
+    "bonus": "0.5 — modest financial compensation",
     "duration_months": "12 — no duration specified, defaulting to annual"
   }
 }
@@ -421,13 +421,13 @@ Output:
   "hiring_active": true,
   "layoff_ratio": 0.0,
   "duration_months": 12,
-  "overtime_bonus": 0.0,
+  "bonus": 0.0,
   "wlb_boost": 0.0,
   "_justification": {
     "stress_gain_rate_multiplier": "1.5x — financial anxiety significantly increases stress",
     "motivation_decay_rate_multiplier": "3.5x — large pay cut devastates morale and loyalty",
     "shock_factor": "0.4 — employees talk, fear and resentment spreads through teams",
-    "overtime_bonus": "0.0 — no compensation, pay reduced"
+    "bonus": "0.0 — no compensation, pay reduced"
   }
 }
 
@@ -447,6 +447,9 @@ CRITICAL INSTRUCTIONS & EXTREME LOGIC REASONING:
 {
   "unrecognized_intent": true
 }
+
+9. POSITIVE GROWTH: If the policy is a positive growth phase (e.g. hiring, expanding, adding resources), `shock_factor` MUST BE 0.0 so people don't panic.
+10. BONUS MAPPING: `bonus` handles all financial compensation (spot bonuses, raises, overtime pay). Map any financial addition to a positive `bonus` multiplier.
 
 --- DYNAMIC RELEVANT EXAMPLES ---
 """

@@ -137,7 +137,7 @@ def run_simulation(
                     workload_multiplier   = config.workload_multiplier,
                     motivation_decay_rate = config.motivation_decay_rate,
                     stress_gain_rate      = config.stress_gain_rate,
-                    overtime_bonus        = config.overtime_bonus,
+                    bonus        = config.bonus,
                     wlb_boost             = config.wlb_boost,
                 )
 

@@ -15,7 +15,7 @@ class SimulationConfig:
     layoff_ratio:           float = 0.0
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
-    overtime_bonus:         float = 0.0
+    bonus:         float = 0.0
     wlb_boost:              float = 0.0
 
 
@@ -77,7 +77,7 @@ POLICIES = {
         motivation_decay_rate=0.002,   # REWARD: Pay cushions the burden significantly
         shock_factor=0.3,
         stress_gain_rate=1.8,          # Still high stress, but lower than Hiring Freeze due to pay
-        overtime_bonus=2.5,            # Strongest financial motivator
+        bonus=2.5,            # Strongest financial motivator
     ),
 
     "Gemini_policy": SimulationConfig(

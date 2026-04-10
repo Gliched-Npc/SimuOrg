@@ -73,7 +73,7 @@ def update_agent_state(agent: EmployeeAgent,
                        workload_multiplier: float,
                        motivation_decay_rate: float,
                        stress_gain_rate: float = 1.0,
-                       overtime_bonus: float = 0.0,
+                       bonus: float = 0.0,
                        wlb_boost: float = 0.0):
     """
     Update one agent's behavioral state for one timestep.
@@ -118,7 +118,7 @@ def update_agent_state(agent: EmployeeAgent,
         + FATIGUE_STRESS_WEIGHT * agent.fatigue
         - COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
     )
-    overtime_stress_relief = min(raw_stress_gain * 0.5, overtime_bonus * 0.02) if overtime_bonus > 0.0 else 0.0
+    overtime_stress_relief = min(raw_stress_gain * 0.5, bonus * 0.02) if bonus > 0.0 else 0.0
     stress_gain = raw_stress_gain - overtime_stress_relief
     agent.stress = max(0.0, min(agent.stress + stress_gain - RECOVERY_RATE, 1.0))
 
@@ -129,11 +129,11 @@ def update_agent_state(agent: EmployeeAgent,
         agent.fatigue = max(agent.fatigue - FATIGUE_RECOVERY_RATE, 0.0)
 
     # Motivation decays under stress OR high workload.
-    # Exception: when overtime_bonus > 0, pay compensates for workload — no workload decay
+    # Exception: when bonus > 0, pay compensates for workload — no workload decay
     # until stress crosses threshold (fatigue eventually overwhelms the pay benefit).
     if agent.stress > MOTIVATION_THRESHOLD:
         agent.motivation = max(agent.motivation - motivation_decay_rate, 0.0)
-    elif workload_multiplier > 1.0 and overtime_bonus == 0.0:
+    elif workload_multiplier > 1.0 and bonus == 0.0:
         # High workload without pay compensation grinds motivation down
         workload_decay = motivation_decay_rate * (workload_multiplier - 1.0) * 1.5
         agent.motivation = max(agent.motivation - workload_decay, 0.0)
@@ -141,19 +141,19 @@ def update_agent_state(agent: EmployeeAgent,
         agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
     # Financial compensation (overtime pay or salary baseline bonus) — phases out with fatigue
-    effective_overtime_bonus = 0.0
-    if overtime_bonus > 0.0:
+    effective_bonus = 0.0
+    if bonus > 0.0:
         fatigue_discount = max(0.0, 1.0 - agent.fatigue)
-        effective_overtime_bonus = overtime_bonus * fatigue_discount
+        effective_bonus = bonus * fatigue_discount
 
-    base_satisfaction = (agent.motivation * 4.0) + effective_overtime_bonus
+    base_satisfaction = (agent.motivation * 4.0) + effective_bonus
     agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
 
     # Financial loyalty gain — being fairly compensated builds commitment.
     # Small per-month effect but persistent: loyalty grows when well compensated,
     # making highly-paid employees more likely to stay long-term.
-    if overtime_bonus > 0.0:
-        loyalty_gain = overtime_bonus * 0.003 * (1.0 - agent.fatigue)
+    if bonus > 0.0:
+        loyalty_gain = bonus * 0.003 * (1.0 - agent.fatigue)
         agent.loyalty = min(1.0, agent.loyalty + loyalty_gain)
 
     # WLB drifts toward a target based on stress above the buffer.

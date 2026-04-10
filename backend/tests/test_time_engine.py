@@ -54,7 +54,7 @@ def _make_minimal_config(**kwargs):
         stress_gain_rate=0.01,
         motivation_decay_rate=0.005,
         shock_factor=0.0,
-        overtime_bonus=0.0,
+        bonus=0.0,
         wlb_boost=0.0,
         hiring_active=False,
         layoff_ratio=0.0,

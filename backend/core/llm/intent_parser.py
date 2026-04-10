@@ -116,7 +116,7 @@ def build_config_from_llm_output(
                   f"rejected — not mentioned by user. Forcing 0.0.")
             llm_json["wlb_boost"] = 0.0
 
-    stress_gain = float(llm_json.get("stress_gain_rate_multiplier", 1.0))
+    stress_gain = float(llm_json.get("stress_gain_rate_multiplier", 1.0)) * sgr
     motivation_decay = float(llm_json.get("motivation_decay_rate_multiplier", 1.0)) * mdr
 
     config = SimulationConfig(
@@ -130,11 +130,11 @@ def build_config_from_llm_output(
         layoff_ratio          = clamp(float(llm_json.get("layoff_ratio", 0.0)),
                                       *bounds.get("layoff_ratio", (0.0, 0.3))),
         stress_gain_rate      = clamp(stress_gain,
-                                      *bounds.get("stress_gain_rate", (0.4, 9.0))),
+                                      *bounds.get("stress_gain_rate", (0.4*sgr, 9.0*sgr))),
         duration_months       = clamp(int(llm_json.get("duration_months", 12)),
                                       *bounds.get("duration_months", (1, 36))),
-        overtime_bonus        = clamp(float(llm_json.get("overtime_bonus", 0.0)),
-                                      *bounds.get("overtime_bonus", (0.0, 5.0))),
+        bonus                 = clamp(float(llm_json.get("bonus", 0.0)),
+                                      *bounds.get("bonus", (0.0, 5.0))),
         wlb_boost             = clamp(float(llm_json.get("wlb_boost", 0.0)),
                                       *bounds.get("wlb_boost", (0.0, 1.0))),
     )
