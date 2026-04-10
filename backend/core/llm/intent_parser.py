@@ -6,6 +6,9 @@ from openai import OpenAI
 from backend.core.llm.prompt_templates import SYSTEM_PROMPT
 from backend.core.llm.bounds import get_param_bounds, clamp
 from backend.core.simulation.policies import SimulationConfig
+from backend.core.llm.scenario_retriever import ScenarioRetriever
+
+_retriever = ScenarioRetriever()
 
 def _mentions_layoff(text: str) -> bool:
     keywords = [
@@ -38,7 +41,8 @@ def translate_policy(user_text: str, calib_context: dict) -> dict:
     Builds a fallback mechanism to Local Ollama if Groq fails or is rate limited.
     """
     attrition = calib_context.get("annual_attrition_rate", 0)
-    system_instructions = SYSTEM_PROMPT + f"\n\nCompany Profile Context:\nAnnual Attrition: {attrition*100:.1f}%\n"
+    dynamic_examples = _retriever.get_top_k_scenarios(user_text, k=2)
+    system_instructions = SYSTEM_PROMPT + f"\n{dynamic_examples}\n\nCompany Profile Context:\nAnnual Attrition: {attrition*100:.1f}%\n"
     
     messages = [
         {"role": "system", "content": system_instructions},

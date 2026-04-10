@@ -12,6 +12,8 @@ from backend.db.database import engine
 from backend.db.models import PolicyGenerationLog
 from datetime import datetime, timezone
 
+from backend.services.orchestrator import orchestrate_user_request
+
 router = APIRouter(prefix="/api/llm", tags=["LLM Services"])
 
 
@@ -69,6 +71,25 @@ def generate_policy(request: PolicyRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class OrchestrateRequest(BaseModel):
+    user_text: str
+
+@router.post("/orchestrate")
+def orchestrate_endpoint(request: OrchestrateRequest):
+    """
+    Executes the full 3-Agent orchestration pipeline end-to-end:
+    - Parses intent & extracts parameters via RAG
+    - Runs the Monte Carlo simulation
+    - Triggers the Reasoning Chain for executive briefing
+    Returns a complete, massive JSON payload to front end.
+    """
+    try:
+        return orchestrate_user_request(request.user_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/policy/{log_id}")
