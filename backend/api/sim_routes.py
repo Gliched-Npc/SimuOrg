@@ -30,6 +30,24 @@ def list_policies():
     return {"policies": list(POLICIES.keys())}
 
 
+@router.get("/test-data")
+def get_test_data():
+    """
+    Return all employees with simulation_id='master' as a JSON array.
+    Used by the Dashboard and Analytics pages for workforce visualisations.
+    """
+    from sqlmodel import Session, select
+    from backend.db.database import engine
+    from backend.db.models import Employee
+
+    with Session(engine) as session:
+        employees = session.exec(
+            select(Employee).where(Employee.simulation_id == "master")
+        ).all()
+
+    return [e.model_dump() for e in employees]
+
+
 @router.post("/run")
 async def run_simulation_endpoint(request: SimulationRequest):
     import os

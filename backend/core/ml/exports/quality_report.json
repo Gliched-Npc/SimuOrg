@@ -1,12 +1,11 @@
 {
-  "auc_roc": 0.738,
-  "cv_auc_mean": 0.8037,
-  "cv_auc_std": 0.0426,
-  "test_accuracy": 0.8061,
-  "train_accuracy": 0.9297,
-  "features_used": 22,
+  "auc_roc": 0.959,
+  "cv_auc_mean": 0.9512,
+  "cv_auc_std": 0.0085,
+  "test_accuracy": 0.8685,
+  "train_accuracy": 0.9097,
+  "features_used": 21,
   "bonus_features": [
-    "overtime",
     "department_encoded",
     "job_role_encoded",
     "performance_rating",
@@ -14,22 +13,28 @@
   ],
   "top_drivers": [
     {
-      "feature": "total_working_years",
-      "importance": 0.0864
-    },
-    {
-      "feature": "overtime",
-      "importance": 0.0836
+      "feature": "years_at_company",
+      "importance": 0.076
     },
     {
       "feature": "satisfaction_composite",
-      "importance": 0.0725
+      "importance": 0.0585
+    },
+    {
+      "feature": "total_working_years",
+      "importance": 0.0564
     }
   ],
   "signal_strength": "strong",
   "simulation_reliable": true,
   "recommendation": "Simulation results are highly reliable. Strong predictive signal found.",
-  "trust_score": 100,
-  "cleaning_audit": [],
+  "trust_score": 91,
+  "cleaning_audit": [
+    "TotalWorkingYears: Filled 9 missing values with median (10.0)",
+    "NumCompaniesWorked: Filled 19 missing values with median (2.0)",
+    "JobSatisfaction: Filled 20 missing values with median (3.0)",
+    "WorkLifeBalance: Filled 38 missing values with median (3.0)",
+    "EnvironmentSatisfaction: Filled 25 missing values with median (3.0)"
+  ],
   "data_status": "warning"
 }
