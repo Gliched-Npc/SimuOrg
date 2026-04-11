@@ -1,57 +1,59 @@
 # backend/core/llm/scenario_retriever.py
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import os
+from pinecone import Pinecone
 from backend.core.llm.extended_scenarios import EXTENDED_SCENARIOS
 
 class ScenarioRetriever:
     def __init__(self):
-        # We initialized the corpus queries when the class is loaded
-        self.scenarios = EXTENDED_SCENARIOS
-        self.queries = [s["query"] for s in self.scenarios]
+        self.api_key = os.getenv("PINECONE_API_KEY")
+        self.index_name = os.getenv("PINECONE_INDEX_NAME", "simuorg-scenarios")
         
-        # Initialize and fit TF-IDF vectorizer
-        # We use standard English stop words to filter out noise
-        self.vectorizer = TfidfVectorizer(stop_words='english')
-        
-        # If there are no scenarios, we don't fit
-        if self.queries:
-            self.tfidf_matrix = self.vectorizer.fit_transform(self.queries)
+        if self.api_key:
+            self.pc = Pinecone(api_key=self.api_key)
+            self.index = self.pc.Index(self.index_name)
         else:
-            self.tfidf_matrix = None
+            print("WARNING: PINECONE_API_KEY not found. RAG will fallback to static examples.")
+            self.pc = None
+            self.index = None
 
     def get_top_k_scenarios(self, user_text: str, k: int = 2) -> str:
         """
-        Calculates cosine similarity between user_text and all scenarios.
+        Calculates semantic similarity between user_text and all scenarios via Pinecone.
         Returns the top `k` scenarios formatted as a string block.
         """
-        if self.tfidf_matrix is None or not self.queries:
-            return ""
+        # Fallback if unconfigured
+        if not self.pc or not self.index:
+            return EXTENDED_SCENARIOS[0]["content"] + "\n\n"
 
-        # Transform user input into the TF-IDF space
-        user_vec = self.vectorizer.transform([user_text])
-        
-        # Compute similarities
-        similarities = cosine_similarity(user_vec, self.tfidf_matrix).flatten()
-        
-        # Get the indices of the top k highest similarity scores
-        # argsort() returns ascending, so we reverse it with [::-1]
-        top_k_indices = similarities.argsort()[-(k):][::-1]
-        
-        # Build the resulting text
-        result_text = ""
-        for idx in top_k_indices:
-            # Optionally we could filter by a minimum similarity threshold,
-            # but returning *something* structurally similar is always helpful.
-            if similarities[idx] > 0.0: 
-                result_text += self.scenarios[idx]["content"] + "\n\n"
-            else:
-                # If there's 0 overlap, maybe just pick a fallback or nothing.
-                # Returning the top match regardless provides safety.
-                pass
-                
-        # If no similarity (complete orthogonal query), it will just return empty or 0 threshold skip
-        # We will guarantee at least one element just to show format if needed.
-        if not result_text.strip() and k > 0 and len(self.scenarios) > 0:
-             result_text = self.scenarios[0]["content"] + "\n\n"
+        try:
+            # 1. Generate the semantic dense vector for the user query
+            embedding = self.pc.inference.embed(
+                model="llama-text-embed-v2",
+                inputs=[user_text],
+                parameters={"input_type": "query"}
+            )
+            query_vector = embedding[0].values
+            
+            # 2. Search Pinecone
+            response = self.index.query(
+                vector=query_vector,
+                top_k=k,
+                include_metadata=True
+            )
+            
+            result_text = ""
+            for match in response.matches:
+                # Minimum threshold check can go here if needed, Pinecone scores range up to 1.0
+                if "content" in match.metadata:
+                    result_text += match.metadata["content"] + "\n\n"
+                    
+            if not result_text.strip():
+                 result_text = EXTENDED_SCENARIOS[0]["content"] + "\n\n"
+                 
+            return result_text.strip()
 
-        return result_text.strip()
+        except Exception as e:
+            print(f"ERROR: Pinecone RAG query failed: {e}")
+            # Fallback guarantee to ensure pipeline doesn't break
+            return EXTENDED_SCENARIOS[0]["content"]
+

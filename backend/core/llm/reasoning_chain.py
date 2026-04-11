@@ -232,7 +232,9 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         "motivation":   metric_block("avg_motivation",       "Motivation",        lower_is_better=False),
         "satisfaction": metric_block("avg_job_satisfaction", "Job Satisfaction",  lower_is_better=False),
         "wlb":          metric_block("avg_work_life_balance","Work-Life Balance", lower_is_better=False),
-        "loyalty":      metric_block("avg_loyalty",          "Loyalty",           lower_is_better=False),
+        # NOTE: loyalty is computed by the simulation engine but excluded from
+        # executive-facing analytics. The model's loyalty decay does not
+        # accurately reflect real-world dynamics for flexibility/WLB policies.
     }
 
     # ── Attrition analysis ─────────────────────────────────────────────────────
@@ -375,10 +377,9 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     weights = {
         "stress":       0.25,
         "attrition":    0.25,
-        "motivation":   0.20,
+        "motivation":   0.25,  # +0.05 from removed loyalty weight
         "productivity": 0.15,
-        "loyalty":      0.10,
-        "wlb":          0.05,
+        "wlb":          0.10,  # +0.05 from removed loyalty weight
     }
     verdict_score = {
         "improving":             100,
@@ -399,7 +400,6 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         weights["attrition"]    * attr_health +
         weights["motivation"]   * verdict_score.get(metrics["motivation"]["verdict"], 50) +
         weights["productivity"] * verdict_score.get(metrics["productivity"]["verdict"], 50) +
-        weights["loyalty"]      * verdict_score.get(metrics["loyalty"]["verdict"], 50) +
         weights["wlb"]          * verdict_score.get(metrics["wlb"]["verdict"], 50)
     )
     health_label = (
@@ -622,7 +622,7 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         "  Verdicts are pre-computed from start→end delta. Do NOT override them.",
         "",
     ]
-    for key in ["stress", "productivity", "motivation", "satisfaction", "wlb", "loyalty"]:
+    for key in ["stress", "productivity", "motivation", "satisfaction", "wlb"]:
         lines.append(fmt_metric(key))
 
     # ── STRESS DEEP DIVE ──────────────────────────────────────────────────────
@@ -656,7 +656,6 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         "  Stress        : 0.0–0.05 healthy | 0.05–0.15 elevated | 0.15+ high risk",
         "  Productivity  : 0.9–1.0 normal | below 0.85 = productivity crisis",
         "  Motivation    : 0.5–0.7 normal | below 0.4 = disengagement risk",
-        "  Loyalty       : 0.5–0.7 normal | below 0.4 = high flight risk",
         "  Satisfaction  : scale 1–5 | below 2.5 = dissatisfied | above 3.5 = satisfied",
         "  WLB           : scale 1–5 | below 2.5 = poor | above 3.5 = good",
         "  Attrition     : <10% healthy | 10–20% moderate | 20–30% concerning | 30%+ crisis",
@@ -732,12 +731,12 @@ Required structure:
 }
 
 SEVERITY GUIDE:
-  high   : attrition > 25% OR stress > 0.15 OR burnout > 10% OR loyalty deteriorating fast
+  high   : attrition > 25% OR stress > 0.15 OR burnout > 10%
   medium : attrition 15-25% OR stress 0.08-0.15 OR motivation deteriorating
   low    : attrition < 15% AND stress < 0.08 AND no burnout
 
 MORALE VERDICT:
-  Derive from motivation + satisfaction + loyalty combined.
+  Derive from motivation + satisfaction + work-life balance combined.
   If 2 of 3 are improving or stable → stable or improving.
   If 2 of 3 are deteriorating → deteriorating.
 

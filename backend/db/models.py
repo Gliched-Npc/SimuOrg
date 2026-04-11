@@ -87,3 +87,16 @@ class PolicyGenerationLog(SQLModel, table=True):
     generated_config: str      = Field()                  # JSON of SimulationConfig
     justification:    str      = Field(default="{}")      # JSON of LLM justification
     created_at:       datetime = Field(default_factory=datetime.utcnow)
+
+
+class OrchestrateJob(SQLModel, table=True):
+    """Tracks a full orchestration pipeline run (intent → sim → reasoning) as an async job."""
+    __tablename__ = "orchestrate_job"
+
+    job_id:     str      = Field(default_factory=lambda: str(_uuid.uuid4()), primary_key=True)
+    status:     str      = Field(default="queued")   # queued → running → completed → failed
+    user_text:  str      = Field()                   # original CEO input
+    result:     Optional[str] = Field(default=None)  # full JSON payload when done
+    error:      Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

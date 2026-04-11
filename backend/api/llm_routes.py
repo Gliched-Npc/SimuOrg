@@ -9,13 +9,13 @@ from sqlmodel import Session
 from backend.core.llm.context_builder import build_context
 from backend.core.llm.intent_parser import translate_policy, build_config_from_llm_output
 from backend.db.database import engine
-from backend.db.models import PolicyGenerationLog
+from backend.db.models import PolicyGenerationLog, OrchestrateJob
 from datetime import datetime, timezone
-
-from backend.services.orchestrator import orchestrate_user_request
 
 router = APIRouter(prefix="/api/llm", tags=["LLM Services"])
 
+
+# ── Policy Generation ──────────────────────────────────────────────────────────
 
 class PolicyRequest(BaseModel):
     description: str
@@ -73,24 +73,65 @@ def generate_policy(request: PolicyRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Orchestration (Async via Celery) ──────────────────────────────────────────
+
 class OrchestrateRequest(BaseModel):
     user_text: str
+
 
 @router.post("/orchestrate")
 def orchestrate_endpoint(request: OrchestrateRequest):
     """
-    Executes the full 3-Agent orchestration pipeline end-to-end:
-    - Parses intent & extracts parameters via RAG
-    - Runs the Monte Carlo simulation
-    - Triggers the Reasoning Chain for executive briefing
-    Returns a complete, massive JSON payload to front end.
+    Kicks off the full 3-agent orchestration pipeline as an async Celery task.
+    Returns a job_id immediately — the frontend must poll /orchestrate/status/{job_id}.
+
+    Flow:
+      1. Creates an OrchestrateJob record in DB (status=queued)
+      2. Fires orchestrate_task.delay() to Celery worker
+      3. Returns {job_id} so the frontend can start polling
     """
-    try:
-        return orchestrate_user_request(request.user_text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    from backend.workers.tasks import orchestrate_task
+
+    with Session(engine) as session:
+        job = OrchestrateJob(user_text=request.user_text)
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.job_id
+
+    orchestrate_task.delay(job_id, request.user_text)
+
+    return {"job_id": job_id, "status": "queued"}
 
 
+@router.get("/orchestrate/status/{job_id}")
+def orchestrate_status(job_id: str):
+    """
+    Poll this until status == 'completed' or 'failed'.
+    On completion, 'result' contains the full simulation + briefing payload.
+    """
+    with Session(engine) as session:
+        job = session.get(OrchestrateJob, job_id)
+
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Orchestration job {job_id} not found.")
+
+    response = {
+        "job_id":     job.job_id,
+        "status":     job.status,
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat(),
+    }
+
+    if job.status == "completed" and job.result:
+        response["result"] = json.loads(job.result)
+    elif job.status == "failed":
+        response["error"] = job.error
+
+    return response
+
+
+# ── Policy Config Retrieval ────────────────────────────────────────────────────
 
 @router.get("/policy/{log_id}")
 def get_policy_log(log_id: str):
@@ -108,7 +149,7 @@ def get_policy_log(log_id: str):
     }
 
 
-# ── CEO Reasoning Chain ────────────────────────────────────────────────────────
+# ── CEO Reasoning Chain (standalone, for already-completed sim jobs) ───────────
 
 class ExplainRequest(BaseModel):
     job_id: str
@@ -117,23 +158,13 @@ class ExplainRequest(BaseModel):
 @router.post("/explain")
 def explain_simulation(request: ExplainRequest):
     """
-    Runs a 4-step chain-of-thought reasoning over a completed simulation result
+    Runs chain-of-thought reasoning over a completed simulation job
     and returns a structured CEO executive briefing.
-
-    Steps:
-      1. Interpret  — what happened and why?
-      2. Compare    — better or worse than historical baseline?
-      3. Risks      — top 3 risks
-      4. Recommend  — concrete CEO actions
-
-    The result is stored in simulation_job.executive_summary so it never needs
-    to be regenerated for the same job.
+    Result is cached in simulation_job.executive_summary.
     """
-    from datetime import datetime
     from backend.db.models import SimulationJob
     from backend.core.llm.reasoning_chain import run_reasoning_chain
 
-    # 1. Load the simulation job
     with Session(engine) as session:
         job = session.get(SimulationJob, request.job_id)
 
@@ -147,7 +178,7 @@ def explain_simulation(request: ExplainRequest):
                    "Wait for the job to finish before requesting an explanation."
         )
 
-    # 2. Return cached summary if already generated (avoid re-calling LLM)
+    # Return cached summary if already generated (avoid re-calling LLM)
     if job.executive_summary:
         return {
             "job_id":   request.job_id,
@@ -155,7 +186,6 @@ def explain_simulation(request: ExplainRequest):
             "briefing": json.loads(job.executive_summary),
         }
 
-    # 3. Parse result and policy config
     if not job.result:
         raise HTTPException(status_code=400, detail="Simulation result data is missing.")
 
@@ -163,21 +193,17 @@ def explain_simulation(request: ExplainRequest):
     policy_config = json.loads(job.policy_config) if job.policy_config else None
     user_intent   = None
 
-    # 3.5 Fetch original user intent if this was a custom policy run
     if job.policy_log_id:
         with Session(engine) as session:
-            from backend.db.models import PolicyGenerationLog
             log = session.get(PolicyGenerationLog, job.policy_log_id)
             if log:
                 user_intent = log.user_prompt
 
-    # 4. Run the reasoning chain with full context
     try:
         briefing = run_reasoning_chain(sim_result, policy_config, user_intent)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Reasoning chain failed: {str(e)}")
 
-    # 5. Persist the briefing so it's never regenerated for this job
     with Session(engine) as session:
         job = session.get(SimulationJob, request.job_id)
         if job:

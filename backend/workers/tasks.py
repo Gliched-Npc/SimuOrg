@@ -12,7 +12,7 @@ from backend.services.simulation_service import (
 )
 from sqlmodel import Session
 from backend.db.database import engine
-from backend.db.models import SimulationJob
+from backend.db.models import SimulationJob, OrchestrateJob
 
 
 def _update_job(job_id: str, status: str, result: dict = None, error: str = None, executive_summary: str = None):
@@ -86,4 +86,39 @@ def compare_simulations_task(self, job_id: str, policy_a: str, policy_b: str, ru
         return result
     except Exception as e:
         _update_job(job_id, "failed", error=str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="tasks.orchestrate")
+def orchestrate_task(self, job_id: str, user_text: str):
+    """
+    Runs the full 3-agent orchestration pipeline in a Celery worker:
+      Agent 1 — Intent routing + parameter extraction
+      Agent 2 — Monte Carlo simulation + reasoning chain
+    Writes result to OrchestrateJob so the frontend can poll /orchestrate/status/{job_id}.
+    """
+    from backend.services.orchestrator import orchestrate_user_request
+    from datetime import datetime
+
+    def _set(status: str, result: dict = None, error: str = None):
+        with Session(engine) as session:
+            job = session.get(OrchestrateJob, job_id)
+            if not job:
+                return
+            job.status     = status
+            job.updated_at = datetime.utcnow()
+            if result is not None:
+                job.result = json.dumps(result)
+            if error is not None:
+                job.error = error
+            session.add(job)
+            session.commit()
+
+    _set("running")
+    try:
+        result = orchestrate_user_request(user_text)
+        _set("completed", result=result)
+        return result
+    except Exception as e:
+        _set("failed", error=str(e))
         raise
