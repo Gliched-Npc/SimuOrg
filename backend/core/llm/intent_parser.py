@@ -119,9 +119,41 @@ def build_config_from_llm_output(
     stress_gain = float(llm_json.get("stress_gain_rate_multiplier", 1.0)) * sgr
     motivation_decay = float(llm_json.get("motivation_decay_rate_multiplier", 1.0)) * mdr
 
+    # ── Precise percentage extraction (bypasses LLM bucket-rounding) ──────────
+    # When the user states "12% raise" and "15% overtime reduction", the LLM
+    # returns exact floats in salary_increase_pct / overtime_reduction_pct.
+    # We use these to compute bonus and workload_multiplier precisely so that
+    # 10% vs 12% raise produces different simulation outcomes.
+    salary_pct   = float(llm_json.get("salary_increase_pct",   0.0))
+    overtime_cut = float(llm_json.get("overtime_reduction_pct", 0.0))
+
+    # Bonus: linear scale — 1% raise = 0.1 bonus units (so 10%→1.0, 12%→1.2, 25%→2.5)
+    # Falls back to LLM's bucketed `bonus` if no explicit salary_pct was returned.
+    if salary_pct > 0.0:
+        precise_bonus = round(salary_pct / 10.0, 3)
+        print(f"[intent_parser] PRECISE salary: {salary_pct:.1f}% → bonus={precise_bonus:.3f} "
+              f"(LLM bucket was {llm_json.get('bonus', 'N/A')})")
+    else:
+        precise_bonus = float(llm_json.get("bonus", 0.0))
+
+    # Workload: overtime reduction directly shrinks workload_multiplier.
+    # 15% cut → 1.0 - 0.15 = 0.85 | 20% cut → 1.0 - 0.20 = 0.80
+    # Falls back to LLM's workload_multiplier if no explicit overtime_cut was returned.
+    if overtime_cut > 0.0:
+        # Clamp: max 60% overtime reduction → min workload of 0.4
+        precise_workload = round(max(0.4, 1.0 - overtime_cut / 100.0), 3)
+        # Propagate consistent stress / motivation relief from the reduced workload
+        _workload_stress_scale = max(0.25, 1.0 - overtime_cut / 100.0)
+        stress_gain   = min(stress_gain, sgr * _workload_stress_scale)
+        print(f"[intent_parser] PRECISE overtime_cut: {overtime_cut:.1f}% "
+              f"→ workload={precise_workload:.3f} "
+              f"(LLM value was {llm_json.get('workload_multiplier', 'N/A')})")
+    else:
+        precise_workload = float(llm_json.get("workload_multiplier", 1.0))
+
     config = SimulationConfig(
-        workload_multiplier   = clamp(float(llm_json.get("workload_multiplier", 1.0)),
-                                      *bounds.get("workload_multiplier", (0.5, 1.6))),
+        workload_multiplier   = clamp(precise_workload,
+                                      *bounds.get("workload_multiplier", (0.4, 1.6))),
         motivation_decay_rate = clamp(motivation_decay,
                                       *bounds.get("motivation_decay_rate", (0.3*mdr, 10.0*mdr))),
         shock_factor          = clamp(float(llm_json.get("shock_factor", 0.0)),
@@ -133,10 +165,13 @@ def build_config_from_llm_output(
                                       *bounds.get("stress_gain_rate", (0.4*sgr, 9.0*sgr))),
         duration_months       = clamp(int(llm_json.get("duration_months", 12)),
                                       *bounds.get("duration_months", (1, 36))),
-        bonus                 = clamp(float(llm_json.get("bonus", 0.0)),
+        bonus                 = clamp(precise_bonus,
                                       *bounds.get("bonus", (0.0, 5.0))),
         wlb_boost             = clamp(float(llm_json.get("wlb_boost", 0.0)),
                                       *bounds.get("wlb_boost", (0.0, 1.0))),
+        # Store raw percentages so time_engine can inject them directly into agent features
+        salary_increase_pct   = max(0.0, salary_pct),
+        overtime_reduction_pct= max(0.0, overtime_cut),
     )
     justification = llm_json.get("_justification", {})
     return config, justification

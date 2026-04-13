@@ -9,7 +9,7 @@ const EXAMPLE_PROMPTS = [
   'Reduce overtime by 20% and increase base salary by 10% for all departments',
   'Introduce flexible work-from-home policy 3 days a week for all staff',
   'Add mandatory leadership training and promote 15% of mid-level employees',
-  'Cut headcount in Sales by 8% and redistribute workload to remaining staff',
+  'Cut headcount by 8% and redistribute workload to remaining staff',
 ]
 
 export default function Simulate() {

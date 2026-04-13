@@ -1,5 +1,6 @@
 # backend/simulation/behavior_engine.py
 
+import math
 from backend.core.simulation.agent import EmployeeAgent
 from backend.core.simulation.org_graph import build_org_graph, OrgGraph
 import json
@@ -109,17 +110,28 @@ def update_agent_state(agent: EmployeeAgent,
     workload_stress_factor = workload_multiplier ** 2
 
     # Stress accumulates each month. Net gain is positive under pressure.
-    # Overtime pay provides a stress dampener — being compensated fairly
-    # reduces subjective stress from overwork (rational agent effect).
-    # The relief is proportional to bonus but capped at 50% of raw gain
-    # so stress can still build under extreme workload.
+    # Financial compensation (salary raise / overtime pay) provides a stress dampener.
+    # The relief is proportional to bonus magnitude so a 25% raise (bonus=2.5)
+    # meaningfully differs from a 10% raise (bonus=1.0).
+    # Relief is capped at 60% of raw gain so stress can still build under extreme workload.
     raw_stress_gain = (
         STRESS_GAIN_RATE * workload_stress_factor * stress_gain_rate
         + NEIGHBOR_STRESS_WEIGHT * neighbor_stress
         + FATIGUE_STRESS_WEIGHT * agent.fatigue
         - COMM_QUALITY_BENEFIT * min(comm_quality, COMM_QUALITY_CAP)
     )
-    overtime_stress_relief = min(raw_stress_gain * 0.5, bonus * 0.02) if bonus > 0.0 else 0.0
+    # Bonus-scaled fraction of raw gain absorbed each month:
+    #   bonus=0.5 (5% raise)  → 10% of raw stress relieved
+    #   bonus=1.0 (10% raise) → 18% of raw stress relieved
+    #   bonus=2.5 (25% raise) → 37% of raw stress relieved
+    #   bonus=3.0 (30% raise) → 41% of raw stress relieved
+    # Formula: (1 - 1/(1+bonus*0.5)) gives a saturating 0–66% range
+    # Hard cap at 60% so even a very large raise can't eliminate all stress
+    if bonus > 0.0:
+        relief_fraction = min(0.60, 1.0 - 1.0 / (1.0 + bonus * 0.25))
+        overtime_stress_relief = raw_stress_gain * relief_fraction
+    else:
+        overtime_stress_relief = 0.0
     stress_gain = raw_stress_gain - overtime_stress_relief
     agent.stress = max(0.0, min(agent.stress + stress_gain - RECOVERY_RATE, 1.0))
 
@@ -141,20 +153,24 @@ def update_agent_state(agent: EmployeeAgent,
     else:
         agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
 
-    # Financial compensation (overtime pay or salary baseline bonus) — phases out with fatigue
+    # Financial compensation (overtime pay or salary raise) — phases out with fatigue.
+    # Uses a log-scale lift so a large raise (bonus=2.5) is clearly better than a
+    # small raise (bonus=0.5), but returns diminish at extreme values.
+    #   bonus=0.5 → lift≈+0.28  (mild satisfaction boost from cost-of-living raise)
+    #   bonus=1.5 → lift≈+0.58  (strong boost from 15% raise — people feel valued)
+    #   bonus=2.5 → lift≈+0.73  (large boost from 25%+ raise — aggressive retention)
     effective_bonus = 0.0
     if bonus > 0.0:
         fatigue_discount = max(0.0, 1.0 - agent.fatigue)
-        effective_bonus = bonus * fatigue_discount
+        effective_bonus = math.log1p(bonus) * fatigue_discount  # log1p(x) = ln(1+x)
 
     base_satisfaction = (agent.motivation * 4.0) + effective_bonus
-    agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))
+    agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))  # capped at 4.0 to match training range
 
-    # Financial loyalty gain — being fairly compensated builds commitment.
-    # Small per-month effect but persistent: loyalty grows when well compensated,
-    # making highly-paid employees more likely to stay long-term.
+    # Financial loyalty gain — proportional to raise magnitude.
+    # A 25% raise (bonus=2.5) builds loyalty significantly faster than a 5% raise (bonus=0.5).
     if bonus > 0.0:
-        loyalty_gain = bonus * 0.003 * (1.0 - agent.fatigue)
+        loyalty_gain = math.log1p(bonus) * 0.008 * (1.0 - agent.fatigue)
         agent.loyalty = min(1.0, agent.loyalty + loyalty_gain)
 
     # WLB drifts toward a target based on stress above the buffer.

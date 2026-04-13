@@ -15,8 +15,14 @@ class SimulationConfig:
     layoff_ratio:           float = 0.0
     stress_gain_rate:       float = 1.0
     duration_months:        int   = 12
-    bonus:         float = 0.0
+    bonus:                  float = 0.0
     wlb_boost:              float = 0.0
+    # ── Precise policy percentages (bypass LLM bucket-rounding) ──────────────
+    # Set by intent_parser when user states an explicit % figure.
+    # time_engine uses these directly to mutate agent features so the ML quit
+    # model sees the exact raise/cut rather than a discretised bonus proxy.
+    salary_increase_pct:    float = 0.0   # e.g. 12.0 for a 12% salary raise
+    overtime_reduction_pct: float = 0.0   # e.g. 20.0 for a 20% overtime cut
 
 
 POLICIES = {

@@ -393,14 +393,18 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     elif cv_mean >= 0.65:
         rec = "Simulation shows directional trends. Treat exact numbers with caution as the model has moderate predictive power."
     else:
+        # Extract top feature names for XAI explanations
+        top_names = [f["feature"].replace('_', ' ').replace('encoded', '').title().strip() for f in top_features]
+        xai_context = f"Our AI evaluated {', '.join(top_names)} as priority drivers, but " if len(top_names) >= 2 else "Our AI scanned all available metrics, but "
+
         # Investigate WHY the signal is weak to give actionable business and data recommendations
         if imbalance_ratio > 4.0:
-            rec = "Data Insufficient for Safe Projections: The dataset lacks enough historical examples of employee turnover to separate noise from genuine flight risks. SOLUTION: [OPTION 1] Expand your HR data export window to 3-5 years to capture more natural attrition events. [OPTION 2] Proceed anyway, but projections are unreliable."
+            rec = f"Data Insufficient for Safe Projections: {xai_context}the dataset lacks enough historical examples of employee turnover to separate mathematically genuine flight risks from random noise. SOLUTION: [OPTION 1] Expand your HR data export window to 3-5 years to capture more natural attrition events. [OPTION 2] Proceed anyway, but projections are unreliable."
         elif len(OPTIONAL_FEATURES) > len([f for f in OPTIONAL_FEATURES if f in FEATURES]):
             missing = [f for f in OPTIONAL_FEATURES if f not in FEATURES]
-            rec = f"Projections Unreliable due to Missing Context: The model lacks critical signals to understand why employees leave. SOLUTION: [OPTION 1] Enrich your dataset by including missing fields such as {', '.join(missing)}. [OPTION 2] Proceed anyway, but projections are unreliable."
+            rec = f"Projections Unreliable due to Missing Context: {xai_context}the model lacks critical external signals to understand why employees actually leave. SOLUTION: [OPTION 1] Enrich your dataset by including missing fields such as {', '.join(missing)}. [OPTION 2] Proceed anyway, but projections are unreliable."
         else:
-            rec = "Predictive Signal is Weak: Employee departures appear largely random based on the current data provided. SOLUTION: [OPTION 1] Supplement your data with Engagement Survey scores or external Compensation Benchmarks to discover hidden retention drivers. [OPTION 2] Proceed anyway, but projections are unreliable."
+            rec = f"Predictive Signal is Weak: {xai_context}your employee departures still appear largely random based on the provided data. SOLUTION: [OPTION 1] Supplement your data with Engagement Survey scores or external Compensation Benchmarks to discover hidden retention drivers. [OPTION 2] Proceed anyway, but projections are unreliable."
 
     quality_report = {
         "auc_roc":             round(float(auc), 4),

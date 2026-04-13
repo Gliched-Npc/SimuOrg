@@ -127,6 +127,28 @@ def run_simulation(
     initial_avg_stress = float(np.mean([a.stress for a in agents if a.is_active]))
     logs = []
 
+    # ── Policy: Inject salary raise into ML quit model features ──────────────
+    # The ML quit model uses `percent_salary_hike` and `monthly_income` as
+    # direct feature inputs. Without updating these fields ALL salary policies
+    # produce identical quit probabilities regardless of raise magnitude.
+    #
+    # ONLY triggers when config.salary_increase_pct > 0 (set by intent_parser
+    # when the user explicitly states a salary percentage like "12% raise").
+    #
+    # We do NOT fall back to bonus-derived injection because `bonus` is also
+    # used by built-in policies like `overtime_pay` (bonus=2.5) which represent
+    # overtime PAY, not a base salary raise — injecting a phantom 25% salary
+    # hike into those scenarios would produce incorrect quit probabilities.
+    _policy_salary_pct = config.salary_increase_pct  # 0.0 if not a salary policy
+    if _policy_salary_pct > 0.0:
+        _clamped_pct = min(_policy_salary_pct, 100.0)
+        print(f"[time_engine] Injecting salary hike: {_clamped_pct:.1f}% "
+              f"into {len([a for a in agents if a.is_active])} agent features.")
+        for agent in agents:
+            if agent.is_active:
+                agent.percent_salary_hike = _clamped_pct
+                agent.monthly_income = agent.monthly_income * (1.0 + _clamped_pct / 100.0)
+
     for month in range(1, config.duration_months + 1):
         print(f"--- Month {month}...")
 
@@ -233,6 +255,17 @@ def run_simulation(
                         new_agent.baseline_satisfaction    = peer.baseline_satisfaction
                         new_agent.baseline_wlb             = peer.baseline_wlb
                         new_agent.motivation               = peer.motivation
+
+                    # ── Apply policy salary to new hires (Edge Case fix) ──────────
+                    # from_template() hardcodes percent_salary_hike=15. If the
+                    # simulation is running a salary policy (e.g. 30% raise), new
+                    # hires would appear to only have a 15% raise → inflated quit
+                    # probability. Apply the same policy hike so the ML model
+                    # scores them consistently with existing employees.
+                    if _policy_salary_pct > 0.0:
+                        new_agent.percent_salary_hike = _clamped_pct
+                        new_agent.monthly_income = new_agent.monthly_income * (1.0 + _clamped_pct / 100.0)
+
 
                     agents.append(new_agent)
                     G.add_node(new_agent.employee_id, agent=new_agent)

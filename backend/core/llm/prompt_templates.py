@@ -11,8 +11,10 @@ The parameters you must output are:
 - `hiring_active`                    (boolean)
 - `layoff_ratio`                     (Direct float)
 - `duration_months`                  (integer)
-- `bonus`                   (Direct float)
+- `bonus`                            (Direct float — see FINANCIAL COMPENSATION RULES)
 - `wlb_boost`                        (Direct float)
+- `salary_increase_pct`              (Raw percentage float — EXACT number user stated, e.g. 12.0 for "12% salary raise". Use 0.0 if no salary change.)
+- `overtime_reduction_pct`           (Raw percentage float — EXACT number user stated, e.g. 20.0 for "reduce overtime by 20%". Use 0.0 if no overtime reduction mentioned.)
 
 IMPORTANT: Do NOT output `salary_multiplier` — it is not a valid field.
 IMPORTANT: `stress_gain_rate_multiplier` and `motivation_decay_rate_multiplier` are RATIOS.
@@ -36,13 +38,31 @@ annual_attrition_rate > 15%:
 ---
 FINANCIAL COMPENSATION RULES:
 Any salary increase, bonus, or pay raise affects these fields:
-- bonus  : primary lever for financial reward (range 0.5–2.5 based on magnitude)
-  - 3%–5% raise   → bonus = 0.5  (cost of living adjustment)
-  - 10%–15% raise → bonus = 1.5  (strong retention incentive)
-  - 20%+ raise    → bonus = 2.5  (aggressive market adjustment)
+
+`salary_increase_pct`: ALWAYS set this to the EXACT percentage the user stated.
+  - "12% salary raise" → salary_increase_pct = 12.0
+  - "10% base salary increase" → salary_increase_pct = 10.0
+  - "30% raise" → salary_increase_pct = 30.0
+  - No salary mention → salary_increase_pct = 0.0
+The backend will use this EXACT value to update the ML model features — do NOT round it to a bucket.
+
+`overtime_reduction_pct`: ALWAYS set this to the EXACT percentage the user stated for overtime reduction.
+  - "reduce overtime by 15%" → overtime_reduction_pct = 15.0
+  - "20% less overtime" → overtime_reduction_pct = 20.0
+  - No overtime reduction mention → overtime_reduction_pct = 0.0
+The backend computes workload_multiplier from this, so still set workload_multiplier too (see WORKLOAD rules).
+
+`bonus` (still needed — drives the per-agent stress-relief and satisfaction lift in the behavior engine):
+  - 3–5% raise   → bonus = 0.5  (cost of living adjustment)
+  - 10–15% raise  → bonus = 1.5  (strong retention incentive)
+  - 20–25% raise  → bonus = 2.5  (aggressive market adjustment)
+  - 30%+ raise    → bonus = 3.0  (exceptional raise)
+  NOTE: salary_increase_pct gives PRECISION; bonus gives the BEHAVIOR CURVE.
+        Both must be set independently.
+
 - motivation_decay_rate_multiplier: salary reduces motivation loss
-  - 3%–5% raise   → 0.8x  (mild improvement)
-  - 10%–15% raise → 0.5x  (strong improvement — people feel valued)
+  - 3–5% raise   → 0.8x  (mild improvement)
+  - 10–15% raise  → 0.5x  (strong improvement — people feel valued)
   - 20%+ raise    → 0.3x  (massive improvement)
 - stress_gain_rate_multiplier: financial security slightly reduces stress
   - any raise     → 0.8x–0.9x  (mild stress relief)
@@ -381,12 +401,12 @@ Output:
   "duration_months": 3,
   "bonus": 1.5,
   "wlb_boost": 0.0,
+  "salary_increase_pct": 10.0,
+  "overtime_reduction_pct": 0.0,
   "_justification": {
-    "workload_multiplier": "1.0 — salary hike does not change workload",
-    "stress_gain_rate_multiplier": "0.8x — financial security provides mild stress relief",
+    "salary_increase_pct": "10.0 — exact figure user stated",
+    "bonus": "1.5 — 10% raise bucket, strong retention signal",
     "motivation_decay_rate_multiplier": "0.5x — 10% raise is a strong retention signal, people feel valued",
-    "bonus": "1.5 — financial compensation lever for salary increase",
-    "wlb_boost": "0.0 — salary alone does not improve schedule or WLB",
     "duration_months": "3 — user said next 3 months"
   }
 }
@@ -403,9 +423,10 @@ Output:
   "duration_months": 12,
   "bonus": 0.5,
   "wlb_boost": 0.0,
+  "salary_increase_pct": 5.0,
+  "overtime_reduction_pct": 0.0,
   "_justification": {
-    "stress_gain_rate_multiplier": "0.9x — minor financial relief, mild stress reduction",
-    "motivation_decay_rate_multiplier": "0.8x — cost of living adjustment, acknowledged but not impactful enough for strong loyalty boost",
+    "salary_increase_pct": "5.0 — exact figure user stated",
     "bonus": "0.5 — modest financial compensation",
     "duration_months": "12 — no duration specified, defaulting to annual"
   }

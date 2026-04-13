@@ -134,17 +134,12 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0, junk_remov
             is_critical = col in CRITICAL_FEATURES
             
             # Severity Logic:
-            # - Critical feature missing > 10% -> Warning
-            # - Any feature missing > 50% -> Warning (Critical) / Info (Bonus)
-            severity = "info"
-            if is_critical and null_rate > 0.10:
-                severity = "warning"
-            elif null_rate > 0.50 and not is_critical:
-                severity = "info" # It's okay for bonus features like DistanceFromHome to be sparse
-            elif null_rate > 0.50 and is_critical:
-                severity = "warning"
+            # If data is missing, we must impute it, which is always a warning.
+            severity = "warning"
+            if is_critical and null_rate > 0.50:
+                severity = "error" # Too much critical data missing
 
-            if severity in ["warning", "info"]:
+            if severity in ["error", "warning"]:
                 tier = "CRITICAL CORE" if is_critical else "BONUS ENRICHMENT"
                 if severity == "warning": trust_score -= (8 if is_critical else 3)
                 else: trust_score -= (2 if is_critical else 1) # Sligth penalty for info-level gaps
@@ -158,6 +153,7 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0, junk_remov
     # ── Satisfaction columns with no variance ──
     for col in ["JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction"]:
         if col in df.columns and df[col].std() < 0.01:
+            trust_score -= 10
             issues.append({
                 "severity": "warning",
                 "code": f"no_variance_{col.lower()}",
@@ -183,6 +179,7 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0, junk_remov
                 
                 # If absolutely no feature has even a 5% correlation with attrition
                 if max_corr < 0.05:
+                    trust_score -= 20
                     issues.append({
                         "severity": "warning",
                         "code": "zero_mathematical_signal",
@@ -195,7 +192,7 @@ def check_data_quality(df: pd.DataFrame, duplicates_removed: int = 0, junk_remov
     # ── Missing Gender ──
     if "Gender" not in df.columns:
         issues.append({
-            "severity": "info",
+            "severity": "warning",
             "code": "no_gender_column",
             "message": "CONSEQUENCE: Gender column not found. The model will not be able to analyze demographic-based flight risks.",
             "suggestion": "SOLUTION: [OPTION 1] Fix by uploading Demographics data if you want Diversity & Inclusion retention insights. [OPTION 2] Proceed normally; 'Unknown' will be used. This is optional and does not affect core model physics.",

@@ -786,7 +786,7 @@ STRICT RULES:
 1. Never contradict a pre-computed verdict. If stress verdict is IMPROVING, do not call it deteriorating.
 2. Never recommend reversing a policy that improved the key outcomes.
 3. Always anchor recommendations to the DOMINANT RISK DRIVER field.
-4. Be specific with numbers. Vague statements are useless to a CEO.
+4. Be specific with meaningful numbers (Headcount, Attrition %). However, DO NOT output raw internal decimals for abstract engine physics like Stress or Motivation (e.g., never say 'dropped to 0.0053'). Translate those abstract decimals into English using the Interpretation Guide (e.g., 'dropped to a healthy baseline' or 'escalated to high risk').
 5. Tone: direct, professional, no jargon, no hedging. 5-minute read.
 
 Return ONLY a valid JSON object. No markdown. No text outside JSON.
