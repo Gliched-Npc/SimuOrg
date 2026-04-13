@@ -15,7 +15,7 @@ def test_list_policies():
     assert "baseline" in data["policies"]
 
 def test_run_simulation_missing_model_returns_400():
-    with patch("os.path.exists", return_value=False):
+    with patch("backend.storage.storage.load_artifact", return_value=None):
         request = SimulationRequest(policy_name="baseline", runs=1)
         with pytest.raises(HTTPException) as exc_info:
             asyncio.run(sim_routes.run_simulation_endpoint(request))
@@ -24,7 +24,7 @@ def test_run_simulation_missing_model_returns_400():
         assert "No trained model found" in exc_info.value.detail
 
 def test_run_simulation_missing_data_returns_400():
-    with patch("os.path.exists", return_value=True), \
+    with patch("backend.storage.storage.load_artifact", return_value={"model": "fake"}), \
          patch("sqlmodel.Session") as mock_session:
              
         mock_exec = MagicMock()
@@ -39,7 +39,7 @@ def test_run_simulation_missing_data_returns_400():
         assert "No employee data" in exc_info.value.detail
 
 def test_run_simulation_success():
-    with patch("os.path.exists", return_value=True), \
+    with patch("backend.storage.storage.load_artifact", return_value={"model": "fake"}), \
          patch("sqlmodel.Session") as mock_session, \
          patch("backend.workers.tasks.run_simulation_task.delay") as mock_task_delay:
              

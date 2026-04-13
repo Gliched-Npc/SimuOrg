@@ -12,10 +12,6 @@ from backend.core.llm.reasoning_chain import run_reasoning_chain
 from backend.core.llm.context_builder import build_context
 
 def get_calib_data():
-    calib_path = "backend/core/ml/exports/calibration.json"
-    if os.path.exists(calib_path):
-        with open(calib_path, "r") as f:
-            return json.load(f)
     from backend.storage.storage import load_artifact
     return load_artifact("calibration") or {}
 

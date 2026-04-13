@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Zap, AlertCircle, RefreshCw } from 'lucide-react'
 import StatusStepper from '../components/StatusStepper'
 import BriefingPanel from '../components/BriefingPanel'
@@ -18,14 +19,23 @@ export default function Simulate() {
   const [error,   setError]   = useState(null)
   const [loading, setLoading] = useState(false)
   const textareaRef = useRef(null)
+  const location = useLocation()
 
   // ── Session Restore ─────────────────────────────────────
   useEffect(() => {
-    const lastPrompt = localStorage.getItem('simuorg_last_prompt')
-    const lastJobId  = localStorage.getItem('simuorg_last_job_id')
-    if (lastPrompt) setPrompt(lastPrompt)
-    if (lastJobId) {
-      getOrchestrateStatus(lastJobId)
+    let targetPrompt = localStorage.getItem('simuorg_last_prompt')
+    let targetJobId  = localStorage.getItem('simuorg_last_job_id')
+
+    if (location.state?.jobId) {
+      targetJobId = location.state.jobId
+      targetPrompt = location.state.prompt
+      localStorage.setItem('simuorg_last_job_id', targetJobId)
+      if (targetPrompt) localStorage.setItem('simuorg_last_prompt', targetPrompt)
+    }
+
+    if (targetPrompt) setPrompt(targetPrompt)
+    if (targetJobId) {
+      getOrchestrateStatus(targetJobId)
         .then(({ data }) => {
           if (data.status === 'completed' && data.result) {
             setResult(data.result)
@@ -34,12 +44,15 @@ export default function Simulate() {
             // Resume polling
             setStatus(data.status)
             setLoading(true)
-            resumePoll(lastJobId)
+            resumePoll(targetJobId)
+          } else if (data.status === 'failed') {
+            setStatus('failed')
+            setError(data.error || 'Orchestration failed')
           }
         })
         .catch(() => {}) // silently ignore stale job_id
     }
-  }, [])
+  }, [location.state])
 
   const resumePoll = (jobId) => {
     const poll = setInterval(async () => {
@@ -280,8 +293,35 @@ export default function Simulate() {
         </div>
       )}
 
+      {/* ── Chat/Clarification Response ─────────────────────── */}
+      {result && result.type === 'chat' && status === 'completed' && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 16,
+          padding: '1.5rem 2rem', borderRadius: 12,
+          background: 'rgba(137,44,220,0.1)',
+          border: '1px solid rgba(137,44,220,0.25)',
+          marginBottom: '1.5rem',
+          animation: 'slideUp 0.3s ease',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #892CDC, #52057B)',
+            padding: 8, borderRadius: 10, flexShrink: 0
+          }}>
+            <Zap size={20} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem', marginBottom: 6 }}>
+              SimuOrg AI
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+              {result.response}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Executive Briefing ─────────────────────────────── */}
-      {result && status === 'completed' && (
+      {result && result.type !== 'chat' && status === 'completed' && (
         <BriefingPanel result={result} />
       )}
     </div>

@@ -29,15 +29,9 @@ def generate_policy(request: PolicyRequest):
     when calling POST /api/sim/run with policy_name="custom".
     """
     try:
-        # 1. Load calibration data — prefer disk cache, fall back to DB
-        calib_path = "backend/core/ml/exports/calibration.json"
-        calib_data = {}
-        if os.path.exists(calib_path):
-            with open(calib_path, "r") as f:
-                calib_data = json.load(f)
-        else:
-            from backend.storage.storage import load_artifact
-            calib_data = load_artifact("calibration") or {}
+        # 1. Load calibration data — strictly from DB (no local fallback)
+        from backend.storage.storage import load_artifact
+        calib_data = load_artifact("calibration") or {}
 
         # 2. Build context out of safe calibration anchors
         context = build_context(calib_data)

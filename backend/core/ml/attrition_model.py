@@ -393,14 +393,14 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     elif cv_mean >= 0.65:
         rec = "Simulation shows directional trends. Treat exact numbers with caution as the model has moderate predictive power."
     else:
-        # Investigate WHY the signal is weak to give actionable Data Science advice
+        # Investigate WHY the signal is weak to give actionable business and data recommendations
         if imbalance_ratio > 4.0:
-            rec = f"Signal is weak due to SEVERE CLASS IMBALANCE ({imbalance_ratio}:1). SOLUTION: [OPTION 1] Extend your HR data export window from 1 year to 3 years to capture more 'Quit' events. [OPTION 2] Use SMOTE to synthetically balance your training data before uploading."
+            rec = "Data Insufficient for Safe Projections: The dataset lacks enough historical examples of employee turnover to separate noise from genuine flight risks. SOLUTION: [OPTION 1] Expand your HR data export window to 3-5 years to capture more natural attrition events. [OPTION 2] Proceed anyway, but projections are unreliable."
         elif len(OPTIONAL_FEATURES) > len([f for f in OPTIONAL_FEATURES if f in FEATURES]):
             missing = [f for f in OPTIONAL_FEATURES if f not in FEATURES]
-            rec = f"Signal is weak and lacks context. SOLUTION: [OPTION 1] Your dataset is missing optional features like {missing}. Re-uploading your CSV with these columns often reveals hidden flight factors. [OPTION 2] Proceed anyway, but projections are unreliable."
+            rec = f"Projections Unreliable due to Missing Context: The model lacks critical signals to understand why employees leave. SOLUTION: [OPTION 1] Enrich your dataset by including missing fields such as {', '.join(missing)}. [OPTION 2] Proceed anyway, but projections are unreliable."
         else:
-            rec = "Signal is too weak (the model cannot find a mathematical reason why your employees quit). SOLUTION: [OPTION 1] Enrich your dataset with Engagement Survey scores or Compensation Benchmarks. [OPTION 2] Your turnover is largely random / uncontrollable."
+            rec = "Predictive Signal is Weak: Employee departures appear largely random based on the current data provided. SOLUTION: [OPTION 1] Supplement your data with Engagement Survey scores or external Compensation Benchmarks to discover hidden retention drivers. [OPTION 2] Proceed anyway, but projections are unreliable."
 
     quality_report = {
         "auc_roc":             round(float(auc), 4),
@@ -431,7 +431,6 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         quality_report["trust_score"] = 100
         quality_report["cleaning_audit"] = []
 
-    os.makedirs("backend/core/ml/exports", exist_ok=True)
     model_payload = {
         "model":          model.base_model,
         "calibrator":     model.calibrator,
@@ -439,13 +438,9 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         "features":       FEATURES,
         "label_encoders": LABEL_ENCODERS,
     }
-    joblib.dump(model_payload, "backend/core/ml/exports/quit_probability.pkl")
-    # Save quality report as JSON for the /api/ml/metrics endpoint
-    import json as _json
-    with open("backend/core/ml/exports/quality_report.json", "w") as _f:
-        _json.dump(quality_report, _f, indent=2)
-    print("[done] Model saved to backend/core/ml/exports/quit_probability.pkl")
-    print("[done] Quality report saved to backend/core/ml/exports/quality_report.json")
+    
+    print("[done] Model packed for DB.")
+    print("[done] Quality report packed for DB.")
 
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact

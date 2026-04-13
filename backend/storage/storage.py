@@ -15,13 +15,7 @@ from datetime import datetime
 
 import joblib
 
-# Maps artifact name → disk path relative to the project root.
-ARTIFACT_DISK_PATHS: dict[str, str] = {
-    "quit_model":  "backend/core/ml/exports/quit_probability.pkl",
-    "burnout":     "backend/core/ml/exports/burnout_threshold.pkl",
-    "calibration": "backend/core/ml/exports/calibration.json",
-    "quality":     "backend/core/ml/exports/quality_report.json",
-}
+
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -97,38 +91,4 @@ def load_artifact(name: str):
     return json.loads(row.data)
 
 
-def restore_artifacts_from_db() -> None:
-    """
-    Called once at application startup (inside init_db / lifespan).
 
-    For each known artifact, if the disk file is missing, load it from the DB
-    and write it back to disk so the rest of the app can load it normally.
-    Nothing changes if the disk file already exists.
-    """
-    from sqlmodel import Session
-    from backend.db.database import engine
-    from backend.db.models import MLArtifact
-
-    os.makedirs("backend/core/ml/exports", exist_ok=True)
-
-    with Session(engine) as session:
-        for name, disk_path in ARTIFACT_DISK_PATHS.items():
-            if os.path.exists(disk_path):
-                continue  # disk cache is fresh — nothing to do
-
-            row = session.get(MLArtifact, name)
-            if row is None:
-                # Not in DB yet — first-ever deployment, user hasn't trained yet.
-                continue
-
-            print(f"[storage] '{name}' missing from disk — restoring from DB...")
-
-            if row.artifact_type == "pkl":
-                obj = _decode_pkl(row.data)
-                joblib.dump(obj, disk_path)
-            else:
-                data = json.loads(row.data)
-                with open(disk_path, "w") as f:
-                    json.dump(data, f, indent=2)
-
-            print(f"[storage] '{name}' restored → {disk_path}")

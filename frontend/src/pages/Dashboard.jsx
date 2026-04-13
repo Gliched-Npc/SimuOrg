@@ -4,6 +4,7 @@ import { Users, TrendingDown, Star, Activity, Server, Database, Clock, Zap } fro
 import KpiCard from '../components/KpiCard'
 import StatusBadge from '../components/StatusBadge'
 import { getEmployees, getOrchestrateStatus } from '../services/api'
+import { healthMeta } from '../utils/healthScore'
 
 // ── Helpers ────────────────────────────────────────────────
 const timeAgo = (ts) => {
@@ -46,11 +47,18 @@ export default function Dashboard() {
             attrition: analytics?.attrition?.annual_pct ?? null,
             satisfaction: analytics?.metrics?.satisfaction?.end ?? null,
           }
-        } catch {
+        } catch (err) {
+          if (err.response?.status === 404) return null
           return { ...item, status: 'failed' }
         }
       })
-    ).then(setJobHistory)
+    ).then((results) => {
+      const validJobs = results.filter(Boolean)
+      if (validJobs.length !== stored.length) {
+        localStorage.setItem('simuorg_job_history', JSON.stringify(validJobs))
+      }
+      setJobHistory(validJobs)
+    })
   }, [])
 
   // ── Derived KPIs ────────────────────────────────────────
@@ -110,8 +118,8 @@ export default function Dashboard() {
           value={lastHealth === '—' ? '—' : `${lastHealth} / 100`}
           icon={Activity}
           color="emerald"
-          delta={lastHealth !== '—' ? (lastHealth >= 70 ? 'Good standing' : 'Needs attention') : undefined}
-          deltaDir={lastHealth !== '—' ? (lastHealth >= 70 ? 'up' : 'down') : null}
+          delta={lastHealth !== '—' ? healthMeta(lastHealth).label : undefined}
+          deltaDir={lastHealth !== '—' ? healthMeta(lastHealth).deltaDir : null}
         />
       </div>
 
@@ -184,7 +192,7 @@ export default function Dashboard() {
                 {jobHistory.map((job, i) => (
                   <tr
                     key={job.job_id}
-                    onClick={() => navigate('/simulate')}
+                    onClick={() => navigate('/simulate', { state: { jobId: job.job_id, prompt: job.prompt } })}
                     style={{
                       borderBottom: '1px solid rgba(188,111,241,0.06)',
                       cursor: 'pointer',
@@ -209,9 +217,12 @@ export default function Dashboard() {
                       {job.health_score != null ? (
                         <span style={{
                           fontSize: '1rem', fontWeight: 800,
-                          color: job.health_score >= 70 ? '#4ade80' : job.health_score >= 50 ? '#fbbf24' : '#f87171'
+                          color: healthMeta(job.health_score).color,
                         }}>
                           {job.health_score}
+                          <span style={{ fontSize: '0.65rem', marginLeft: 4, opacity: 0.7 }}>
+                            {healthMeta(job.health_score).label}
+                          </span>
                         </span>
                       ) : (
                         <span style={{ color: 'rgba(188,111,241,0.3)', fontSize: '0.85rem' }}>—</span>

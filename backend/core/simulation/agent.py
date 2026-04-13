@@ -10,7 +10,6 @@ from backend.core.ml.attrition_model import engineer_features
 
 # Lazy-loaded — model is loaded on first use, not at import time.
 # This allows the server to start even if no model has been trained yet.
-_QUIT_MODEL_PATH = "backend/core/ml/exports/quit_probability.pkl"
 _quit_model_cache = None
 
 
@@ -18,12 +17,13 @@ def _get_quit_model():
     """Load (and cache) the quit model on first call."""
     global _quit_model_cache
     if _quit_model_cache is None:
-        if not os.path.exists(_QUIT_MODEL_PATH):
+        from backend.storage.storage import load_artifact
+        _saved = load_artifact("quit_model")
+        if not _saved:
             raise FileNotFoundError(
-                f"Quit model not found at {_QUIT_MODEL_PATH}. "
+                f"Quit model not found in DB. "
                 "Please upload a dataset first via POST /api/upload/dataset."
             )
-        _saved = joblib.load(_QUIT_MODEL_PATH)
 
         # Reconstruct calibrated wrapper if calibrator is present (new format).
         # Falls back to raw model for backwards compatibility with old .pkl files.

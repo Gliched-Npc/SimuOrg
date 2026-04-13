@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, FileText, ArrowRight } from 'lucide-react'
-import { validateDataset, uploadDataset, getTrainingStatus, getFeatureImportance } from '../services/api'
+import { Upload, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, FileText, ArrowRight, Database } from 'lucide-react'
+import { validateDataset, uploadDataset, getTrainingStatus, getFeatureImportance, getModelMetrics, getDatasetMetadata } from '../services/api'
 
 const REQUIRED_COLS = [
   'EmployeeID','ManagerID','Department','JobRole','Age',
@@ -19,6 +19,8 @@ export default function UploadData() {
   const [isDragging,    setIsDragging]    = useState(false)
   const [validation,    setValidation]    = useState(null)     // {trust_score, rows, issues, ...}
   const [shapData,      setShapData]      = useState(null)     // ML feature importance buckets
+  const [mlMetrics,     setMlMetrics]     = useState(null)     // quality_report from /api/ml/metrics
+  const [datasetMeta,   setDatasetMeta]   = useState(null)     // from /api/upload/metadata
   const [validating,    setValidating]    = useState(false)
   const [uploading,     setUploading]     = useState(false)
   const [trainStage,    setTrainStage]    = useState(-1)       // -1 = not started
@@ -38,6 +40,8 @@ export default function UploadData() {
     setTrainStage(-1)
     setTrainDone(false)
     setShapData(null)
+    setMlMetrics(null)
+    setDatasetMeta(null)
     setError(null)
   }
 
@@ -70,6 +74,20 @@ export default function UploadData() {
       setUploading(true)
       setTrainStage(1)
       resumePoll(lastJob)
+    } else {
+      // Check if dataset already exists
+      Promise.allSettled([
+        getDatasetMetadata(),
+        getFeatureImportance(),
+        getModelMetrics(),
+      ]).then(([metaRes, shapRes, metricsRes]) => {
+        if (metaRes.status === 'fulfilled' && metricsRes.status === 'fulfilled') {
+          setDatasetMeta(metaRes.value.data)
+          if (shapRes.status === 'fulfilled') setShapData(shapRes.value.data.buckets)
+          setMlMetrics(metricsRes.value.data)
+          setTrainDone(true)
+        }
+      })
     }
   }, [])
 
@@ -91,9 +109,13 @@ export default function UploadData() {
           setUploading(false)
           localStorage.removeItem('simuorg_training_job_id')
           
-          getFeatureImportance()
-            .then(res => setShapData(res.data.buckets))
-            .catch(e => console.warn('SHAP fetch failed:', e))
+          Promise.allSettled([
+            getFeatureImportance(),
+            getModelMetrics(),
+          ]).then(([shapRes, metricsRes]) => {
+            if (shapRes.status === 'fulfilled') setShapData(shapRes.value.data.buckets)
+            if (metricsRes.status === 'fulfilled') setMlMetrics(metricsRes.value.data)
+          })
         } else if (status.status === 'failed') {
           clearInterval(poll)
           clearInterval(stageInterval)
@@ -118,6 +140,7 @@ export default function UploadData() {
       const { data } = await uploadDataset(file)
       const { job_id } = data
       localStorage.setItem('simuorg_training_job_id', job_id)
+      localStorage.removeItem('simuorg_job_history')
       setTrainStage(1)
       resumePoll(job_id)
     } catch (err) {
@@ -136,30 +159,60 @@ export default function UploadData() {
         <p className="page-sub">Import your HR employee CSV to begin training the simulation model.</p>
       </div>
 
+      {/* Global Hidden Input */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFile(e.target.files[0])}
+      />
+
+      {/* ── Active Dataset Banner ────────────────────────────────────────── */}
+      {datasetMeta && !file && (
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(74,222,128,0.3)', background: 'rgba(74,222,128,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ padding: 10, background: 'rgba(74,222,128,0.15)', borderRadius: 10 }}>
+                <Database size={24} color="#4ade80" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: '#fff', fontSize: '1.05rem' }}>Active Dataset: {datasetMeta.filename}</div>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(74,222,128,0.8)', marginTop: 2 }}>
+                  {Number(datasetMeta.rows).toLocaleString()} employees · Uploaded {new Date(datasetMeta.uploaded_at).toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => inputRef.current?.click()}
+              style={{
+                padding: '0.65rem 1.25rem', borderRadius: 10, background: 'rgba(137,44,220,0.15)', border: '1px solid #892CDC', color: '#fff', fontWeight: 600, cursor: 'pointer'
+              }}
+            >
+              Upload New Dataset
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Drop Zone ────────────────────────────────────────── */}
-      <div className="glass-card" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          style={{
-            border: `2px dashed ${isDragging ? '#892CDC' : file ? 'rgba(74,222,128,0.4)' : 'rgba(188,111,241,0.25)'}`,
-            borderRadius: '1rem',
-            padding: '3rem 2rem',
-            textAlign: 'center',
-            cursor: 'pointer',
-            background: isDragging ? 'rgba(137,44,220,0.1)' : file ? 'rgba(74,222,128,0.04)' : 'rgba(82,5,123,0.06)',
-            transition: 'all 0.25s',
-          }}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv"
-            style={{ display: 'none' }}
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
+      {(!datasetMeta || file) && (
+        <div className="glass-card" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={onDrop}
+            onClick={() => inputRef.current?.click()}
+            style={{
+              border: `2px dashed ${isDragging ? '#892CDC' : file ? 'rgba(74,222,128,0.4)' : 'rgba(188,111,241,0.25)'}`,
+              borderRadius: '1rem',
+              padding: '3rem 2rem',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: isDragging ? 'rgba(137,44,220,0.1)' : file ? 'rgba(74,222,128,0.04)' : 'rgba(82,5,123,0.06)',
+              transition: 'all 0.25s',
+            }}
+          >
           {file ? (
             <>
               <FileText size={40} color="#4ade80" style={{ margin: '0 auto 1rem', display: 'block' }} />
@@ -215,7 +268,8 @@ export default function UploadData() {
             </div>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* ── Action Buttons ────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -362,43 +416,258 @@ export default function UploadData() {
 
           {trainDone && (
             <div style={{ animation: 'fadeIn 0.5s ease', marginTop: '1.5rem' }}>
+
+              {/* ── Success Banner ── */}
               <div style={{
-                padding: '1rem 1.25rem',
-                borderRadius: 10, background: 'rgba(74,222,128,0.08)',
+                padding: '1rem 1.25rem', borderRadius: 10,
+                background: 'rgba(74,222,128,0.08)',
                 border: '1px solid rgba(74,222,128,0.2)',
                 display: 'flex', alignItems: 'flex-start', gap: 10,
+                marginBottom: '1.5rem',
               }}>
                 <CheckCircle size={20} color="#4ade80" style={{ flexShrink: 0, marginTop: 2 }} />
                 <div>
-                  <div style={{ fontWeight: 700, color: '#4ade80', fontSize: '0.9rem' }}>
-                    Training Complete & Validated
-                  </div>
+                  <div style={{ fontWeight: 700, color: '#4ade80', fontSize: '0.9rem' }}>Training Complete &amp; Validated</div>
                   <div style={{ fontSize: '0.8rem', color: 'rgba(74,222,128,0.6)', marginTop: 2 }}>
-                    Your model is ready — head to Simulate to run policy analysis.
+                    Model is trained and ready. Review the quality report below before simulating.
                   </div>
                 </div>
               </div>
 
-              {shapData && (
-                <div style={{ marginTop: '1.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: '1.25rem' }}>
-                  <h4 style={{ fontSize: '0.85rem', color: '#fff', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Model Genuinity (Top Features)
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                    {shapData.most_influential?.slice(0,6).map((item, i) => {
-                      const cleanName = item.feature.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()
+              {/* ── Model Quality Report ── */}
+              {mlMetrics && (
+                <div style={{
+                  borderRadius: 14,
+                  border: '1px solid rgba(188,111,241,0.2)',
+                  background: 'rgba(82,5,123,0.12)',
+                  overflow: 'hidden',
+                  marginBottom: '1.5rem',
+                }}>
+                  {/* Report Header */}
+                  <div style={{
+                    padding: '1.25rem 1.5rem',
+                    borderBottom: '1px solid rgba(188,111,241,0.12)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff' }}>Model Quality Report</div>
+                      <div style={{ fontSize: '0.72rem', color: 'rgba(188,111,241,0.5)', marginTop: 2 }}>
+                        Evaluated on held-out test split · XGBoost Attrition Classifier
+                      </div>
+                    </div>
+                    {/* Confidence Badge */}
+                    {(() => {
+                      const score = mlMetrics.cv_auc_mean ?? mlMetrics.auc_roc ?? mlMetrics.test_accuracy ?? null
+                      const pct   = score != null ? Math.round(score * 100) : null
+                      const color = pct >= 80 ? '#4ade80' : pct >= 65 ? '#fbbf24' : '#f87171'
+                      const label = pct >= 80 ? 'High Confidence' : pct >= 65 ? 'Moderate Confidence' : 'Low Confidence'
+                      return pct != null ? (
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '2.2rem', fontWeight: 900, color, lineHeight: 1 }}>{pct}%</div>
+                          <div style={{
+                            fontSize: '0.65rem', fontWeight: 700, color,
+                            textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2, opacity: 0.85,
+                          }}>{label}</div>
+                        </div>
+                      ) : null
+                    })()}
+                  </div>
+
+                  {/* Metric Bars */}
+                  <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {[
+                      { label: 'AUC-ROC (Test)', key: mlMetrics.auc_roc, desc: "Model's ability to distinguish leavers from stayers" },
+                      { label: 'CV AUC Mean', key: mlMetrics.cv_auc_mean, desc: `5-fold cross-validated AUC ± ${mlMetrics.cv_auc_std ?? '?'}` },
+                      { label: 'Test Accuracy', key: mlMetrics.test_accuracy, desc: 'Overall correct predictions on held-out test data' },
+                      { label: 'Train Accuracy', key: mlMetrics.train_accuracy, desc: 'Accuracy on training data (for overfitting check)' },
+                    ]
+                      .filter(m => m.key != null)
+                      .map(({ label, key, desc }) => {
+                        const pct = Math.round(key * 100)
+                        const color = pct >= 85 ? '#4ade80' : pct >= 70 ? '#fbbf24' : '#f87171'
+                        return (
+                          <div key={label}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                              <div>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>{label}</span>
+                                <span style={{ fontSize: '0.72rem', color: 'rgba(188,111,241,0.45)', marginLeft: 8 }}>{desc}</span>
+                              </div>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 800, color }}>{pct}%</span>
+                            </div>
+                            <div style={{ height: 6, borderRadius: 3, background: 'rgba(188,111,241,0.1)' }}>
+                              <div style={{
+                                height: '100%', borderRadius: 3, width: `${pct}%`,
+                                background: `linear-gradient(90deg, #892CDC, ${color})`,
+                                transition: 'width 1s ease',
+                              }} />
+                            </div>
+                          </div>
+                        )
+                      })
+                    }
+
+                    {/* Signal Strength pill */}
+                    {mlMetrics.signal_strength && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(188,111,241,0.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                          Predictive Signal:
+                        </span>
+                        <span style={{
+                          fontSize: '0.72rem', fontWeight: 800,
+                          padding: '0.2rem 0.65rem', borderRadius: 999,
+                          background: mlMetrics.signal_strength === 'strong' ? 'rgba(74,222,128,0.12)' : mlMetrics.signal_strength === 'moderate' ? 'rgba(251,191,36,0.12)' : 'rgba(248,113,113,0.12)',
+                          color:      mlMetrics.signal_strength === 'strong' ? '#4ade80' : mlMetrics.signal_strength === 'moderate' ? '#fbbf24' : '#f87171',
+                          border:     `1px solid ${mlMetrics.signal_strength === 'strong' ? 'rgba(74,222,128,0.25)' : mlMetrics.signal_strength === 'moderate' ? 'rgba(251,191,36,0.25)' : 'rgba(248,113,113,0.25)'}`,
+                          textTransform: 'capitalize',
+                        }}>
+                          {mlMetrics.signal_strength}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)' }}>
+                          {mlMetrics.simulation_reliable ? '· Simulation results are reliable' : '· Treat projections with caution'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Recommendation from ML engine */}
+                    {mlMetrics.recommendation && (() => {
+                      const text = mlMetrics.recommendation;
+                      let mainDesc = text;
+                      let options = [];
+                      if (text.includes('SOLUTION:') && text.includes('[OPTION 1]') && text.includes('[OPTION 2]')) {
+                        const parts = text.split('SOLUTION:');
+                        mainDesc = parts[0].trim();
+                        const optParts = parts[1].split('[OPTION 2]');
+                        options.push(optParts[0].replace('[OPTION 1]', '').trim());
+                        options.push(optParts[1].trim());
+                      }
+
+                      const isGood = mlMetrics.signal_strength === 'strong';
+                      const isModerate = mlMetrics.signal_strength === 'moderate';
+                      
+                      const colorTheme = isGood ? '#4ade80' : (isModerate ? '#fbbf24' : '#f87171');
+                      const bgTheme = isGood ? 'rgba(74,222,128,0.08)' : (isModerate ? 'rgba(251,191,36,0.08)' : 'rgba(248,113,113,0.08)');
+                      const borderTheme = isGood ? 'rgba(74,222,128,0.2)' : (isModerate ? 'rgba(251,191,36,0.2)' : 'rgba(248,113,113,0.2)');
+                      const Icon = isGood ? CheckCircle : AlertTriangle;
+
                       return (
-                        <div key={item.feature} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', borderBottom: '1px solid rgba(188,111,241,0.1)', paddingBottom: '0.25rem' }}>
-                          <span style={{ color: 'rgba(255,255,255,0.8)', textTransform: 'capitalize' }}>{cleanName}</span>
-                          <span style={{ color: '#4ade80', fontWeight: 600 }}>{(item.importance * 100).toFixed(1)}%</span>
+                        <div style={{
+                          marginTop: 8, padding: '1.25rem', borderRadius: 12,
+                          background: bgTheme,
+                          border: `1px solid ${borderTheme}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <Icon size={16} color={colorTheme} />
+                            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: colorTheme, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                              ML Engine Assessment
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.5, marginBottom: options.length ? 14 : 0 }}>
+                            {mainDesc}
+                          </div>
+                          
+                          {options.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {/* Option 1 Box */}
+                              <div style={{ 
+                                display: 'flex', alignItems: 'flex-start', gap: 12, 
+                                padding: '1rem', borderRadius: 10, 
+                                background: 'rgba(74,222,128,0.08)', 
+                                border: '1px solid rgba(74,222,128,0.2)' 
+                              }}>
+                                <div style={{ 
+                                  minWidth: 24, height: 24, borderRadius: '50%', 
+                                  background: 'linear-gradient(135deg, #4ade80, #22c55e)', 
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                  color: '#000', fontSize: '0.75rem', fontWeight: 800 
+                                }}>1</div>
+                                <div>
+                                  <div style={{fontSize: '0.75rem', fontWeight: 800, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4}}>
+                                    Recommended Path
+                                  </div>
+                                  <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+                                    {options[0]}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Option 2 Box */}
+                              <div style={{ 
+                                display: 'flex', alignItems: 'flex-start', gap: 12, 
+                                padding: '1rem', borderRadius: 10, 
+                                background: 'rgba(255,255,255,0.03)', 
+                                border: '1px dashed rgba(255,255,255,0.15)' 
+                              }}>
+                                <div style={{ 
+                                  minWidth: 24, height: 24, borderRadius: '50%', 
+                                  background: 'transparent', border: '2px solid rgba(255,255,255,0.3)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                  color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', fontWeight: 800 
+                                }}>2</div>
+                                <div>
+                                  <div style={{fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4}}>
+                                    Alternative
+                                  </div>
+                                  <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+                                    {options[1]}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
-                    })}
+                    })()}
+
+                    {/* Top Driving Factors from SHAP */}
+                    {shapData?.most_influential?.length > 0 && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <div style={{
+                          fontSize: '0.72rem', fontWeight: 700,
+                          color: 'rgba(188,111,241,0.5)',
+                          textTransform: 'uppercase', letterSpacing: '0.08em',
+                          marginBottom: '0.75rem',
+                        }}>
+                          Top Attrition Drivers (SHAP)
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {shapData.most_influential.slice(0, 5).map((item, i) => {
+                            const allImportances = [
+                              ...(shapData.most_influential || []),
+                              ...(shapData.moderately_influential || []),
+                              ...(shapData.least_influential || []),
+                            ]
+                            const maxVal = Math.max(...allImportances.map(x => x.importance), 0.001)
+                            const barPct = Math.round((item.importance / maxVal) * 100)
+                            const cleanName = item.feature.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                            const barColor = i === 0 ? '#BC6FF1' : i === 1 ? '#892CDC' : 'rgba(188,111,241,0.5)'
+                            return (
+                              <div key={item.feature}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                  <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)' }}>{cleanName}</span>
+                                  <span style={{ fontSize: '0.75rem', color: barColor, fontWeight: 700 }}>
+                                    #{i + 1} driver
+                                  </span>
+                                </div>
+                                <div style={{ height: 5, borderRadius: 3, background: 'rgba(188,111,241,0.08)' }}>
+                                  <div style={{
+                                    height: '100%', borderRadius: 3,
+                                    width: `${barPct}%`,
+                                    background: barColor,
+                                    transition: 'width 1s ease',
+                                  }} />
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
-              
-              <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+
+              {/* ── Go to Simulate CTA ── */}
+              <div style={{ marginTop: '1rem', textAlign: 'center' }}>
                 <button
                   onClick={() => navigate('/simulate')}
                   style={{

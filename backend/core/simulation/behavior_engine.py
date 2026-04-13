@@ -10,10 +10,11 @@ def _load_calibration():
     """Lazy-load calibration — re-reads after retrain without server restart."""
     global _calibration_cache
     if _calibration_cache is None:
-        try:
-            with open("backend/core/ml/exports/calibration.json") as f:
-                _calibration_cache = json.load(f)
-        except FileNotFoundError:
+        from backend.storage.storage import load_artifact
+        data = load_artifact("calibration")
+        if data:
+            _calibration_cache = data
+        else:
             _calibration_cache = {
                 "stress_gain_rate": 0.0132,
                 "behavior_stress_gain_rate": 0.0264,

@@ -111,12 +111,11 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             annual_attrition_pct = 0.0
 
         # Load calibration, if available, to anchor realism check.
-        calibration_path = "backend/core/ml/exports/calibration.json"
+        from backend.storage.storage import load_artifact
         baseline_annual_attrition = None
-        if os.path.exists(calibration_path):
+        cal = load_artifact("calibration")
+        if cal:
             try:
-                with open(calibration_path) as f:
-                    cal = json.load(f)
                 baseline_annual_attrition = float(cal.get("annual_attrition_rate", 0.0)) * 100.0
             except Exception:
                 baseline_annual_attrition = None

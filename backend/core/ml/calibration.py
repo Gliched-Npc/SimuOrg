@@ -12,7 +12,7 @@ from backend.core.ml.burnout_estimator import burnout_threshold
 from backend.core.ml.attrition_model import engineer_features
 
 
-def calibrate(save_path="backend/core/ml/exports/calibration.json", stress_amplification_override=None):
+def calibrate(stress_amplification_override=None):
     print("=== Running simulation calibration...")
 
     with Session(engine) as session:
@@ -23,14 +23,14 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json", stress_ampli
     if not employees:
         raise ValueError("No employees found in database. Run upload/ingest first.")
 
-    model_path = "backend/core/ml/exports/quit_probability.pkl"
-    if not os.path.exists(model_path):
+    from backend.storage.storage import load_artifact
+    _saved = load_artifact("quit_model")
+    if not _saved:
         raise ValueError(
-            f"Quit probability model not found at '{model_path}'. "
+            f"Quit probability model not found in DB. "
             "Train the attrition model before running calibration."
         )
 
-    _saved          = joblib.load(model_path)
     base_model      = _saved["model"]
     calibrator      = _saved.get("calibrator", None)
     tuned_threshold = _saved["threshold"]
@@ -266,11 +266,8 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json", stress_ampli
     }
 
 
-    os.makedirs("backend/core/ml/exports", exist_ok=True)
-    tmp = save_path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(calibration, f, indent=2)
-    os.replace(tmp, save_path)
+    from backend.storage.storage import save_artifact
+    save_artifact("calibration", calibration, "json")
 
     print("+++ Initial calibration saved.")
     print("=== Running empirical calibration...")
@@ -381,10 +378,7 @@ def calibrate(save_path="backend/core/ml/exports/calibration.json", stress_ampli
     calibration["calib_quality"]          = calib_quality
     calibration["calib_attrition_std"]    = round(stability_std, 4)
     calibration["empirical_attrition_rate"] = round(stability_mean, 4)
-    tmp = save_path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(calibration, f, indent=2)
-    os.replace(tmp, save_path)
+
 
     print("\n+++ Calibration complete:")
     for k, v in calibration.items():

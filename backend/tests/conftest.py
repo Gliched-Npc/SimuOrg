@@ -19,10 +19,9 @@ def block_real_db():
 
 
 @pytest.fixture(autouse=True)
-def isolate_calibration_file(tmp_path, monkeypatch):
+def isolate_calibration_file(monkeypatch):
     """
-    Redirect calibration.json reads/writes to a temp file per test.
-    Prevents test pollution of real exports/calibration.json.
+    Mock the DB artifact loader so tests don't fail trying to read from DB.
     """
     fake_cal = {
         "prob_scale":               1.0,
@@ -39,10 +38,13 @@ def isolate_calibration_file(tmp_path, monkeypatch):
         "calib_quality":            "stable",
         "calib_attrition_std":      0.01,
     }
-    import json
-    cal_path = tmp_path / "calibration.json"
-    cal_path.write_text(json.dumps(fake_cal))
-
-    # Patch the path constant used in time_engine and behavior_engine
-    monkeypatch.setenv("CALIBRATION_PATH", str(cal_path))
+    def fake_load_artifact(key):
+        if key == "calibration":
+            return fake_cal
+        if key == "quit_model":
+            return {"model": "fake"}
+        return None
+        
+    import backend.storage.storage as storage
+    monkeypatch.setattr(storage, "load_artifact", fake_load_artifact)
     yield

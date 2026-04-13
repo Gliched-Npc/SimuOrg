@@ -35,6 +35,7 @@ export const uploadDataset = (file) => {
 };
 
 export const getTrainingStatus = (jobId) => API.get(`/upload/status/${jobId}`);
+export const getDatasetMetadata = () => API.get('/upload/metadata');
 
 // ── ML & XAI ────────────────────────────────────────────────
 export const getFeatureImportance = () => API.get('/ml/feature-importance');

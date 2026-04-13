@@ -109,8 +109,21 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     init_db()
     try:
         result = ingest_from_dataframe(df)
+        with Session(engine) as session:
+            from sqlalchemy import text
+            session.exec(text("TRUNCATE TABLE simulation_job, orchestrate_job, policy_generation_log CASCADE"))
+            session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+    # 4.5 Save dataset metadata
+    from backend.storage.storage import save_artifact
+    from datetime import datetime, timezone
+    save_artifact("dataset_metadata", {
+        "filename": file.filename,
+        "rows": result["ingested"],
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }, "json")
 
     # 5. Kick off training + calibration 
     job_id = str(uuid.uuid4())
@@ -154,3 +167,12 @@ def get_training_status(job_id: str):
         "error":  job.error,
         "result": result,
     }
+
+@router.get("/metadata")
+def get_dataset_metadata():
+    from backend.storage.storage import load_artifact
+    metadata = load_artifact("dataset_metadata")
+    if not metadata:
+        raise HTTPException(status_code=404, detail="No dataset uploaded.")
+    return metadata
+

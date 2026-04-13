@@ -82,7 +82,7 @@ def full_calibration_patch(tmp_path):
     Patches all external dependencies of calibrate() so the pure math is testable.
     Returns the mock objects so individual tests can adjust them.
     """
-    save_path = str(tmp_path / "calibration.json")
+
 
     employees = [
         _make_mock_employee(employee_id=i, attrition="Yes" if i % 5 == 0 else "No")
@@ -97,7 +97,7 @@ def full_calibration_patch(tmp_path):
     patches = {
         "session":       patch("backend.core.ml.calibration.Session"),
         "joblib_load":   patch("backend.core.ml.calibration.joblib.load"),
-        "os_exists":     patch("backend.core.ml.calibration.os.path.exists", return_value=True),
+        "load_artifact": patch("backend.storage.storage.load_artifact"),
         "run_sim":       patch("backend.core.simulation.time_engine.run_simulation", return_value=sim_result),
         "load_agents":   patch("backend.core.simulation.time_engine.load_agents_from_db", return_value=[]),
         "build_graph":   patch("backend.core.simulation.org_graph.build_org_graph"),
@@ -123,8 +123,10 @@ def full_calibration_patch(tmp_path):
         "features":       [],
         "label_encoders": {},
     }
+    
+    started["load_artifact"].return_value = started["joblib_load"].return_value
 
-    yield save_path, started
+    yield started
 
     for p in patches.values():
         p.stop()
@@ -142,10 +144,9 @@ class TestStressAmplificationOverride:
 
     def test_zero_override_is_not_swallowed(self, full_calibration_patch):
         """0.0 must survive into the output — this is the exact audit bug."""
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path, stress_amplification_override=0.0)
+        result = calibrate(stress_amplification_override=0.0)
 
         assert result["stress_amplification"] == 0.0, (
             "stress_amplification_override=0.0 was swallowed. "
@@ -154,34 +155,20 @@ class TestStressAmplificationOverride:
 
     def test_none_override_computes_from_data(self, full_calibration_patch):
         """None must trigger the data-driven calculation path, not return 0."""
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path, stress_amplification_override=None)
+        result = calibrate(stress_amplification_override=None)
 
         assert result["stress_amplification"] > 0.0
         assert result["stress_amplification"] <= 5.0   # capped at 5.0 per inline comment
 
     def test_positive_override_respected(self, full_calibration_patch):
         """Any explicit positive float override must pass through unchanged."""
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path, stress_amplification_override=3.7)
+        result = calibrate(stress_amplification_override=3.7)
 
         assert result["stress_amplification"] == 3.7
-
-    def test_override_written_to_json(self, full_calibration_patch):
-        """The overridden value must be persisted to calibration.json, not just returned."""
-        save_path, _ = full_calibration_patch
-        from backend.core.ml.calibration import calibrate
-
-        calibrate(save_path=save_path, stress_amplification_override=0.0)
-
-        with open(save_path) as f:
-            saved = json.load(f)
-
-        assert saved["stress_amplification"] == 0.0
 
 
 class TestCalibrationOutputSchema:
@@ -196,61 +183,51 @@ class TestCalibrationOutputSchema:
     ]
 
     def test_all_required_keys_present(self, full_calibration_patch):
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path)
+        result = calibrate()
 
         for key in self.REQUIRED_KEYS:
             assert key in result, f"Missing key in calibration output: '{key}'"
 
     def test_stress_gain_rate_within_bounds(self, full_calibration_patch):
         """stress_gain_rate is clamped to [0.0, 0.05] in the code."""
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path)
+        result = calibrate()
 
         assert 0.0 <= result["stress_gain_rate"] <= 0.05
 
     def test_behavior_stress_gain_rate_mirrors_stress_gain_rate(self, full_calibration_patch):
         """behavior_stress_gain_rate is an explicit alias — must always equal stress_gain_rate."""
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path)
+        result = calibrate()
 
         assert result["behavior_stress_gain_rate"] == result["stress_gain_rate"]
 
     def test_prob_scale_positive(self, full_calibration_patch):
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path)
+        result = calibrate()
 
         assert result["prob_scale"] > 0.0
 
     def test_calib_quality_valid_value(self, full_calibration_patch):
-        save_path, _ = full_calibration_patch
         from backend.core.ml.calibration import calibrate
 
-        result = calibrate(save_path=save_path)
+        result = calibrate()
 
         assert result["calib_quality"] in ("stable", "noisy")
 
 
 class TestNoEmployeesEdgeCase:
-    """calibrate() must raise cleanly when the DB is empty."""
-
-    def test_raises_on_empty_db(self, tmp_path):
-        save_path = str(tmp_path / "calibration.json")
-
-        with patch("backend.core.ml.calibration.Session") as mock_session, \
-             patch("backend.core.ml.calibration.os.path.exists", return_value=True):
+    def test_raises_on_empty_db(self):
+        with patch("backend.core.ml.calibration.Session") as mock_session:
 
             mock_session.return_value.__enter__.return_value \
                 .exec.return_value.all.return_value = []
 
             from backend.core.ml.calibration import calibrate
             with pytest.raises(ValueError, match="No employees found"):
-                calibrate(save_path=save_path)
+                calibrate()

@@ -1,5 +1,6 @@
 import React from 'react'
 import { Printer, TrendingUp, TrendingDown, Activity, AlertTriangle } from 'lucide-react'
+import { healthMeta } from '../utils/healthScore'
 
 const SEVERITY_COLOR = { HIGH: '#f87171', MEDIUM: '#fbbf24', LOW: '#4ade80' }
 const VERDICT_COLOR  = { IMPROVING: '#4ade80', STABLE: '#fbbf24', DECLINING: '#f87171' }
@@ -105,7 +106,8 @@ export default function BriefingPanel({ result }) {
             label: 'Org Health Score',
             value: analytics.health_score,
             suffix: '/ 100',
-            color: verdictColor,
+            color: healthMeta(analytics.health_score).color,
+            subLabel: healthMeta(analytics.health_score).label,
             icon: Activity
           },
           {
@@ -154,6 +156,19 @@ export default function BriefingPanel({ result }) {
             }}>
               {m.value}{m.suffix}
             </div>
+            {m.subLabel && (
+              <div style={{
+                marginTop: 6,
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                color: m.color,
+                opacity: 0.8,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}>
+                {m.subLabel}
+              </div>
+            )}
           </div>
         ))}
       </div>

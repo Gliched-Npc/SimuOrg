@@ -57,7 +57,8 @@ async def run_simulation_endpoint(request: SimulationRequest):
     from backend.db.models import Employee, SimulationJob, PolicyGenerationLog
     from backend.workers.tasks import run_simulation_task
 
-    if not os.path.exists("backend/core/ml/exports/quit_probability.pkl"):
+    from backend.storage.storage import load_artifact
+    if not load_artifact("quit_model"):
         raise HTTPException(status_code=400, detail="No trained model found.")
 
     with Session(engine) as session:

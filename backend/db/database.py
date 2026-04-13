@@ -43,10 +43,6 @@ def _run_migrations():
 def init_db():
     SQLModel.metadata.create_all(engine)
     _run_migrations()
-    # Restore any ML artifacts that are missing from disk but present in the DB.
-    # This makes the DB the source of truth and disk a local cache.
-    from backend.storage.storage import restore_artifacts_from_db
-    restore_artifacts_from_db()
 
 
 def get_session():

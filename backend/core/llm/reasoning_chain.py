@@ -288,6 +288,33 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     else:
         stress_shape = f"peaked at month {peak_stress_month} then recovered — mid-period stress spike"
 
+    # ── Healthy Worker Effect detection ────────────────────────────────────────
+    # When workload INCREASES but avg stress DROPS, the most likely cause is NOT
+    # genuine de-stressing — it's that the highest-stress employees quit first,
+    # and new hires (starting at low stress) are diluting the population average.
+    # This is the "healthy worker survival bias" and must be flagged so the LLM
+    # does not present it as a positive policy outcome.
+    total_voluntary_for_hwe = sum((_safe_mean(r, "attrition_count") or 0) for r in results)
+    hwe_attrition_rate = (total_voluntary_for_hwe / max(hc_start, 1)) * 100 if 'hc_start' in dir() else 0
+    healthy_worker_effect_warning = None
+    if (
+        scenario["is_workload_increase"]
+        and stress_pct_drop < -1.0          # stress measurably dropped
+        and total_voluntary_for_hwe > 20    # meaningful attrition occurred
+    ):
+        workload_pct = round((config.get("workload_multiplier", 1.0) - 1) * 100) if isinstance(config, dict) else 25
+        healthy_worker_effect_warning = (
+            f"HEALTHY WORKER EFFECT DETECTED: Workload INCREASED by {workload_pct}% "
+            f"yet average stress DROPPED by {abs(stress_pct_drop):.1f}%. "
+            f"This is NOT genuine de-stressing. "
+            f"The most likely cause: {round(total_voluntary_for_hwe)} high-stress employees quit over the period "
+            f"and were replaced by new hires who start with near-zero stress, "
+            f"pulling the population AVERAGE down. "
+            f"The REMAINING employees may be under increasing pressure. "
+            f"Do NOT present this stress drop as a positive policy outcome. "
+            f"Flag it as a population composition artifact."
+        )
+
     # ── Burnout analysis ───────────────────────────────────────────────────────
 
     total_burnout = sum((_safe_mean(r, "burnout_count") or 0) for r in results)
@@ -368,8 +395,19 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         }.get(v, 0)
         risk_scores[key] = score
 
-    dominant_risk = max(risk_scores, key=risk_scores.get) if risk_scores else "none"
-    dominant_risk_label = metrics.get(dominant_risk, {}).get("label", "unknown")
+    # If every metric is stable or improving (all scores == 0 or 1),
+    # don't arbitrarily pick one as the "dominant risk" — it misleads the LLM.
+    # Use a forward-looking risk label instead.
+    max_risk_score = max(risk_scores.values()) if risk_scores else 0
+    if max_risk_score <= 1:
+        # All metrics are stable or better — anchor recommendation to attrition sustainability
+        dominant_risk = "none"
+        dominant_risk_label = "Attrition Sustainability"
+    else:
+        # At least one metric is deteriorating — pick the worst
+        worst_keys = [k for k, v in risk_scores.items() if v == max_risk_score]
+        dominant_risk = worst_keys[0]
+        dominant_risk_label = metrics.get(dominant_risk, {}).get("label", "unknown")
 
     # ── Composite health score (0–100, higher = healthier org) ────────────────
     # Weighted average of metric verdicts
@@ -436,6 +474,7 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         "stress_peak":          round(peak_stress, 4),
         "stress_peak_month":    peak_stress_month,
         "stress_pct_change":    stress_pct_drop,
+        "healthy_worker_effect_warning": healthy_worker_effect_warning,
         "burnout": {
             "total_events":      round(total_burnout, 1),
             "end_period_count":  round(end_burnout, 1),
@@ -579,7 +618,17 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     if config.get("wlb_boost", 0):
         lines.append(f"  WLB boost        : +{config['wlb_boost']} points — schedule/flexibility improvement")
     if config.get("bonus", 0):
-        lines.append(f"  Overtime bonus   : {config['bonus']} — financial compensation lever active")
+        # Map the internal bonus float to an overtime premium description
+        bonus_val = config['bonus']
+        if bonus_val >= 2.0:
+            pay_approx = "~1.5x–2x overtime rate (intensive mandatory overtime compensation)"
+        elif bonus_val >= 1.0:
+            pay_approx = "~10–15% overtime premium (moderate extra pay for extra work)"
+        else:
+            pay_approx = "~5–10% overtime supplement (partial compensation for extra load)"
+        lines.append(f"  Overtime pay     : {bonus_val} [{pay_approx}] — employees compensated for extra workload")
+        lines.append(f"  NOTE: This is OVERTIME PAY tied to the workload increase, not a general salary raise.")
+        lines.append(f"  It partially offsets the stress of more work, but is transactional — not a retention signal like a permanent raise.")
     if not config.get("hiring_active", True):
         lines.append("  Hiring           : FROZEN — no backfill for exits")
     if config.get("shock_factor", 0) > 0.3:
@@ -637,8 +686,22 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         "  SCALE                : Stress > 0.15 = high risk | 0.05–0.15 = elevated | < 0.05 = healthy",
         f"  VERDICT              : Final stress {stress_end:.4f} is "
         f"{'HEALTHY' if stress_end < 0.05 else 'ELEVATED' if stress_end < 0.15 else 'HIGH RISK'}",
-        "",
     ]
+
+    # Inject healthy worker effect warning right after the stress verdict
+    hwe = analytics.get("healthy_worker_effect_warning")
+    if hwe:
+        lines += [
+            "",
+            "  ⚠ HEALTHY WORKER EFFECT WARNING:",
+            f"  {hwe}",
+            "  ─────────────────────────────────────────────────────────────",
+            "  INSTRUCTION: In your briefing, do NOT say 'stress improved' or 'stress dropped'.",
+            "  Instead say something like: 'Average stress appears lower, but this reflects",
+            "  workforce composition change — high-stress employees left and new hires",
+            "  diluted the average. The underlying workload pressure remains unresolved.'",
+        ]
+    lines.append("")
 
     # ── BURNOUT ───────────────────────────────────────────────────────────────
     lines += [
@@ -663,11 +726,28 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     ]
 
     # ── DOMINANT RISK AND TASK ────────────────────────────────────────────────
+    dominant_risk_label = analytics['dominant_risk']
+    is_all_healthy = dominant_risk_label == "Attrition Sustainability"
+
     lines += [
         "── DOMINANT RISK DRIVER ─────────────────────────────────────",
-        f"  {analytics['dominant_risk']} is the metric in worst shape.",
-        "  Anchor risks and recommendation to this first.",
-        "",
+    ]
+    if is_all_healthy:
+        lines += [
+            "  ✓ No metric is in a deteriorating state.",
+            "  All key indicators are STABLE or IMPROVING.",
+            "  The forward-looking risk is: Attrition Sustainability.",
+            "  Focus the recommendation on sustaining the current positive trajectory.",
+            "  Do NOT invent risks or suggest the policy is problematic — the data says it is working.",
+        ]
+    else:
+        lines += [
+            f"  {dominant_risk_label} is the metric in worst shape.",
+            "  Anchor risks and recommendation to this first.",
+        ]
+    lines.append("")
+
+    lines += [
         "── YOUR TASK ────────────────────────────────────────────────",
         "  Write a CEO executive briefing using ONLY the analytics above.",
         "  Follow the SCENARIO READING RULES at the top of this brief.",
@@ -686,6 +766,8 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         ]
     elif sc["is_workload_reduction"]:
         lines.append("  ✓ Stress drop is expected and positive — credit the workload reduction.")
+    elif is_all_healthy and config.get("bonus", 0) > 0:
+        lines.append("  ✓ Pay increase is actively buffering workload stress — acknowledge this explicitly in the briefing.")
 
     lines.append("  Recommendation must address the DOMINANT RISK DRIVER.")
 

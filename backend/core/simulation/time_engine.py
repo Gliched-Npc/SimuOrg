@@ -27,10 +27,11 @@ def _get_calibration():
     """Lazy-load calibration.json. Re-reads after clear_engine_calibration_cache()."""
     global _engine_calibration_cache
     if _engine_calibration_cache is None:
-        try:
-            with open("backend/core/ml/exports/calibration.json") as f:
-                _engine_calibration_cache = json.load(f)
-        except FileNotFoundError:
+        from backend.storage.storage import load_artifact
+        data = load_artifact("calibration")
+        if data:
+            _engine_calibration_cache = data
+        else:
             _engine_calibration_cache = {
                 "prob_scale": 1.0,
                 "stress_amplification": 2.0,

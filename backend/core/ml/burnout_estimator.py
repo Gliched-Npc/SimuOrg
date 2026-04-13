@@ -42,10 +42,7 @@ def train_burnout_estimator():
     print(f"  Manager L4 (15yr)  : {burnout_threshold(4, 15)}")
     print(f"  Director L5 (20yr) : {burnout_threshold(5, 20)}")
 
-    os.makedirs("backend/core/ml/exports", exist_ok=True)
-    joblib.dump(burnout_threshold, "backend/core/ml/exports/burnout_threshold.pkl")
-    print("[done] Saved to backend/core/ml/exports/burnout_threshold.pkl")
-
+    print("[done] Packed for DB")
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact
     save_artifact("burnout", burnout_threshold, "pkl")
