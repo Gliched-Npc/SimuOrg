@@ -131,7 +131,88 @@ NOTE: wlb_boost should increase proportionally for reductions tied to schedule c
 For pure scope cuts without schedule change, wlb_boost stays 0.0.
 
 ---
+HEADCOUNT REDUCTION + WORKLOAD REDISTRIBUTION RULES:
+When a policy says "cut X% of headcount and redistribute workload to remaining staff":
+  - layoff_ratio = X / 100  (e.g., 8% cut → 0.08, 24% cut → 0.24)
+  - hiring_active = false  (cutting headcount means no backfill)
+  - workload_multiplier = 1.0 + (X / 100) / (1.0 - X / 100)
+      This is the exact math: if 8% are removed, 100% of work falls on 92% of people → 1/0.92 ≈ 1.087
+      If 24% are removed, 100% of work falls on 76% of people → 1/0.76 ≈ 1.316
+  - stress_gain_rate_multiplier scales with the SQUARE of the new workload (quadratic pressure):
+      8% cut  → workload 1.09 → stress multiplier ~2.0x
+      15% cut → workload 1.18 → stress multiplier ~3.5x
+      24% cut → workload 1.32 → stress multiplier ~5.5x
+      30%+ cut → workload 1.43+ → stress multiplier ~7.0x (PANIC territory)
+  - motivation_decay_rate_multiplier: survivor guilt + overwork compound:
+      8% cut  → motivation decay ~3.0x
+      15% cut → motivation decay ~4.0x
+      24% cut → motivation decay ~5.5x
+  - shock_factor: higher is more contagious fear. Scale with layoff_ratio:
+      8% cut  → 0.4 (noticeable, real fear)
+      15% cut → 0.5 (significant panic)
+      24% cut → 0.6 (mass exit, very high contagion)
+
+KEY INSIGHT ON ATTRITION INVERSION:
+  A larger headcount cut does NOT always mean higher voluntary attrition rate.
+  In large layoffs (24%), voluntary attrition is SUPPRESSED because:
+  - Fear paralysis: remaining staff are afraid to quit (they feel lucky to have a job)
+  - At-risk pool reduction: the low-performers most likely to quit were already laid off
+  - The annual_attrition_pct (voluntary only) may appear LOWER in a 24% cut than an 8% cut
+  This is NOT a positive signal — it is fear suppression. The TRUE workforce loss (voluntary + layoffs)
+  is what matters. Always set layoff_suppression context correctly via layoff_ratio.
+
+---
 FEW-SHOT EXAMPLES
+
+User: "cut headcount by 8% and redistribute workload to remaining staff"
+Output:
+{
+  "workload_multiplier": 1.09,
+  "stress_gain_rate_multiplier": 2.0,
+  "motivation_decay_rate_multiplier": 3.0,
+  "shock_factor": 0.4,
+  "hiring_active": false,
+  "layoff_ratio": 0.08,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "salary_increase_pct": 0.0,
+  "overtime_reduction_pct": 0.0,
+  "_justification": {
+    "workload_multiplier": "1/0.92 = 1.087 — 100% of work now carried by 92% of staff",
+    "stress_gain_rate_multiplier": "2.0x — moderate overburden with layoff fear",
+    "motivation_decay_rate_multiplier": "3.0x — survivor guilt + workload increase",
+    "shock_factor": "0.4 — 8% cut is visible and creates real fear among peers",
+    "hiring_active": "false — cutting headcount means no backfill",
+    "layoff_ratio": "0.08 — explicit 8% headcount reduction",
+    "note": "Voluntary attrition may appear LOWER than a smaller cut due to fear suppression. True loss = voluntary + 8% forced."
+  }
+}
+
+User: "cut headcount by 24% and redistribute workload to remaining staff"
+Output:
+{
+  "workload_multiplier": 1.32,
+  "stress_gain_rate_multiplier": 5.5,
+  "motivation_decay_rate_multiplier": 5.5,
+  "shock_factor": 0.6,
+  "hiring_active": false,
+  "layoff_ratio": 0.24,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "salary_increase_pct": 0.0,
+  "overtime_reduction_pct": 0.0,
+  "_justification": {
+    "workload_multiplier": "1/0.76 = 1.316 — 100% of work now carried by 76% of staff, heavy overburden",
+    "stress_gain_rate_multiplier": "5.5x — near-panic level. Large layoffs create job insecurity cascade",
+    "motivation_decay_rate_multiplier": "5.5x — severe survivor guilt, exhaustion, no hope of workload relief",
+    "shock_factor": "0.6 — mass departure, very high fear contagion across all teams",
+    "hiring_active": "false — no backfill in a cost-cutting headcount reduction",
+    "layoff_ratio": "0.24 — explicit 24% headcount reduction",
+    "attrition_note": "Voluntary attrition will be SUPPRESSED vs a smaller cut. Survivors are afraid to quit. True workforce loss = voluntary + 24% forced exits."
+  }
+}
 
 User: "15% staff reduction next quarter, no backfill"
 Output:

@@ -345,20 +345,55 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     # Layoff as % of starting headcount
     layoff_pct_of_headcount = round((total_layoffs / hc_start) * 100, 2) if hc_start > 0 else 0
 
+    # ── Layoff-adjusted voluntary rate (Fix 2) ────────────────────────────────
+    # This is the voluntary attrition rate computed on the SURVIVOR pool only
+    # (i.e., excluding the people who were already removed via layoff).
+    # It surfaces the true voluntary quit pressure on remaining employees.
+    # Why this matters for comparison correctness:
+    #   A 24% cut leaves only 76% of workforce. Even if the SAME NUMBER of
+    #   voluntary quits happens as in an 8% cut, the RATE per survivor is higher.
+    #   This metric corrects for the denominator shrinkage so scenarios are
+    #   comparable on a like-for-like basis.
+    survivor_pool = max(hc_start - total_layoffs, 1)
+    voluntary_rate_on_survivors = round((total_voluntary / survivor_pool) * 100, 2)
+
     # Fear suppression: did voluntary attrition drop in months WITH layoffs?
     # If yes, the lower quit rate is fear-driven, not satisfaction-driven.
     if scenario["is_layoff_scenario"] and total_layoffs > 0:
+        layoff_ratio_actual = round(total_layoffs / max(hc_start, 1) * 100, 1)
         layoff_suppression_warning = (
-            f"LAYOFF SUPPRESSION DETECTED: {total_layoffs:.0f} employees were laid off. "
-            f"Voluntary attrition appears lower ({summary.get('annual_attrition_pct', '?')}%) "
-            f"but this is fear-driven suppression, NOT a retention improvement. "
-            f"True workforce loss rate is {true_loss_rate_pct}% when layoffs are included. "
-            f"Do NOT praise the lower voluntary attrition rate in a layoff scenario."
+            f"LAYOFF SUPPRESSION DETECTED: {total_layoffs:.0f} employees were forcibly laid off "
+            f"({layoff_ratio_actual}% of starting headcount). "
+            f"Voluntary attrition appears to be {summary.get('annual_attrition_pct', '?')}% annualised, "
+            f"but this suppressed rate is fear-driven — remaining staff are afraid to quit. "
+            f"This is NOT a retention improvement. "
+            f"True workforce loss rate (voluntary + forced) is {true_loss_rate_pct}%. "
+            f"Voluntary quit rate on SURVIVOR pool (excl. layoffs) is {voluntary_rate_on_survivors}%. "
+            f"Do NOT praise the lower voluntary attrition rate in a layoff scenario. "
+            f"IMPORTANT: A SMALLER layoff (e.g. 8%) may show a HIGHER voluntary attrition rate than "
+            f"a LARGER layoff (e.g. 24%) because fewer people were removed from the at-risk pool "
+            f"and survivors have less fear paralysis. This is the attrition INVERSION effect — "
+            f"it does NOT mean the smaller layoff policy is worse. The true comparable metric is "
+            f"true_loss_rate_pct (voluntary + forced combined), not voluntary rate alone."
+        )
+        # Build a human-readable fear suppression note for the prompt
+        fear_suppression_note = (
+            f"  ATTRITION INVERSION EXPLANATION:\n"
+            f"  ⚠ Layoff size SUPPRESSES voluntary attrition — the BIGGER the layoff, the LOWER \n"
+            f"    the voluntary quit rate appears. This is NOT an improvement.\n"
+            f"  ⚠ A 24% cut removes {total_layoffs:.0f} at-risk employees from the quit pool AND\n"
+            f"    creates fear paralysis in survivors. Both effects reduce voluntary exits.\n"
+            f"  ⚠ An 8% cut keeps more at-risk employees in the pool AND has less fear paralysis,\n"
+            f"    so it shows HIGHER voluntary attrition — but LOWER true workforce loss.\n"
+            f"  ⚠ Do NOT interpret a lower voluntary rate as 'better retention' in any layoff scenario.\n"
+            f"  ⚠ The CORRECT comparison metric is TRUE WORKFORCE LOSS RATE (voluntary + forced).\n"
+            f"  ✓ Voluntary rate on survivor pool: {voluntary_rate_on_survivors}% (removes denominator bias)"
         )
         # Override attrition verdict — it cannot be "improving" if layoffs happened
         attrition_verdict_override = "deteriorating"
     else:
         layoff_suppression_warning = None
+        fear_suppression_note = None
         attrition_verdict_override = None
 
     annual_attr      = summary.get("annual_attrition_pct", 0)
@@ -467,7 +502,11 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
             "total_workforce_loss":    round(total_workforce_loss, 1),
             "true_loss_rate_pct":      true_loss_rate_pct,
             "layoff_pct_of_headcount": layoff_pct_of_headcount,
+            # Voluntary rate recalculated on the survivor pool (excludes layoffs from denominator)
+            # This is the like-for-like metric for comparing across different layoff sizes.
+            "voluntary_rate_on_survivors": voluntary_rate_on_survivors,
             "layoff_suppression_warning": layoff_suppression_warning,
+            "fear_suppression_note":   fear_suppression_note,
             "attrition_verdict_override": attrition_verdict_override,
         },
         "stress_shape":         stress_shape,
@@ -597,17 +636,23 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     # ── LAYOFF SUPPRESSION WARNING (injected as a hard alert if present) ──────
     if att.get("layoff_suppression_warning"):
         lines += [
-            "── ⚠ CRITICAL LAYOFF SUPPRESSION WARNING ────────────────────",
+            "── ⚠ CRITICAL LAYOFF SUPPRESSION WARNING ──────────────────────",
             f"  {att['layoff_suppression_warning']}",
-            f"  Total voluntary exits    : {att['total_voluntary_exits']:.0f}",
-            f"  Total forced layoffs     : {att['total_layoffs']:.0f}",
-            f"  TRUE total workforce loss: {att['total_workforce_loss']:.0f} people ({att['true_loss_rate_pct']}% of headcount)",
-            f"  Layoffs as % of headcount: {att['layoff_pct_of_headcount']}%",
+            f"  Total voluntary exits          : {att['total_voluntary_exits']:.0f}",
+            f"  Total forced layoffs           : {att['total_layoffs']:.0f}",
+            f"  TRUE total workforce loss      : {att['total_workforce_loss']:.0f} people ({att['true_loss_rate_pct']}% of headcount)",
+            f"  Layoffs as % of headcount      : {att['layoff_pct_of_headcount']}%",
+            f"  Voluntary rate on SURVIVOR pool: {att.get('voluntary_rate_on_survivors', 'N/A')}%  ← use this for cross-scenario comparisons",
             "  The briefing MUST lead with the true workforce loss, not the voluntary rate.",
-            "",
         ]
+        if att.get("fear_suppression_note"):
+            lines += [
+                "",
+                att["fear_suppression_note"],
+            ]
+        lines.append("")
 
-    # ── POLICY PARAMETERS (translated to plain English) ───────────────────────
+    # ── POLICY PARAMETERS (translated to plain English) ─────────────────────────────────────────
     config = analytics["config"]
     lines += [
         "── POLICY PARAMETERS (plain English translation) ────────────",
@@ -635,9 +680,9 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         lines.append(f"  Peer contagion   : HIGH ({config['shock_factor']}) — departures trigger further exits")
     lines.append("")
 
-    # ── HEADCOUNT ─────────────────────────────────────────────────────────────
+    # ── HEADCOUNT ───────────────────────────────────────────────────────────────────
     lines += [
-        "── HEADCOUNT ────────────────────────────────────────────────",
+        "── HEADCOUNT ──────────────────────────────────────────────────",
         f"  Start : {hc['start']} employees",
         f"  End   : {hc['end']} employees",
         f"  Net   : {hc['net']:+.0f} employees ({hc['pct_change']:+.1f}%)",
@@ -646,18 +691,26 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         lines.append(f"  Of which {att['total_layoffs']:.0f} were FORCED LAYOFFS — not voluntary exits")
     lines.append("")
 
-    # ── ATTRITION ─────────────────────────────────────────────────────────────
+    # ── ATTRITION ───────────────────────────────────────────────────────────────────
     lines += [
-        "── ATTRITION ────────────────────────────────────────────────",
+        "── ATTRITION ──────────────────────────────────────────────────",
         f"  Voluntary attrition (this scenario) : {att['annual_pct']:.2f}% annualised",
         f"  Historical baseline (actual)         : {att['baseline_pct']}%",
         f"  Difference vs baseline               : {att['vs_baseline_pts']:+.2f} pts  [{att['vs_baseline_verdict'].upper()}]",
     ]
     if att.get("true_loss_rate_pct", 0) != att.get("annual_pct", 0):
         lines += [
-            f"  TRUE workforce loss rate (incl. layoffs): {att['true_loss_rate_pct']}%",
-            f"  ← USE THIS NUMBER, not the voluntary rate, in your situation summary.",
+            f"  TRUE workforce loss rate (incl. layoffs)  : {att['true_loss_rate_pct']}%",
+            f"  Voluntary rate on SURVIVOR pool (bias-free): {att.get('voluntary_rate_on_survivors', 'N/A')}%",
+            f"  ← USE TRUE LOSS RATE in your situation summary, NOT the voluntary rate.",
+            f"  ← Survivor-pool rate removes denominator bias — use it for cross-scenario comparisons.",
         ]
+        if att.get("fear_suppression_note"):
+            lines += [
+                "",
+                att["fear_suppression_note"],
+                "",
+            ]
     lines += [
         f"  Average monthly attrition rate       : {att['avg_monthly_rate']:.3f}%/month",
         f"  Peak attrition month                 : Month {att['peak_month']} ({att['peak_rate_pct']:.2f}%)",
