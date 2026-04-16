@@ -324,7 +324,7 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
 
     # ── Headcount analysis ─────────────────────────────────────────────────────
 
-    hc_start = _safe_mean(start, "headcount") or 0
+    hc_start = summary.get("initial_headcount", _safe_mean(start, "headcount") or 0)
     hc_end   = _safe_mean(end,   "headcount") or 0
     hc_net   = round(hc_end - hc_start, 1)
     hc_pct   = round(_pct_change(hc_start, hc_end), 2)
@@ -476,7 +476,7 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         weights["wlb"]          * verdict_score.get(metrics["wlb"]["verdict"], 50)
     )
     health_label = (
-        "healthy"     if health_score >= 70 else
+        "healthy"     if health_score >= 65 else
         "mixed"       if health_score >= 45 else
         "at risk"     if health_score >= 25 else
         "critical"
@@ -789,9 +789,8 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         lines += [
             "  ✓ No metric is in a deteriorating state.",
             "  All key indicators are STABLE or IMPROVING.",
-            "  The forward-looking risk is: Attrition Sustainability.",
             "  Focus the recommendation on sustaining the current positive trajectory.",
-            "  Do NOT invent risks or suggest the policy is problematic — the data says it is working.",
+            "  Do NOT invent risks or suggest the policy is problematic — the data says it is working. If there are no real risks, you may return empty risks.",
         ]
     else:
         lines += [
@@ -854,7 +853,7 @@ Required structure:
     "productivity_verdict": "improving | stable | deteriorating",
     "one_line": "Single verdict sentence e.g. 'Strong overall improvement with one area of concern.'"
   },
-  "comparison": "2 sentences comparing annualised attrition to the historical baseline. Use exact numbers.",
+  "comparison": "2 sentences explicitly citing the pre-computed 'Difference vs baseline' metric in pts. DO NOT perform your own subtraction or confuse total workforce loss with voluntary attrition.",
   "risks": [
     {"title": "Short title", "severity": "high | medium | low", "detail": "1-2 sentences on what drives this risk and its consequence."},
     {"title": "...", "severity": "...", "detail": "..."},
@@ -875,7 +874,7 @@ MORALE VERDICT:
   If 2 of 3 are improving or stable → stable or improving.
   If 2 of 3 are deteriorating → deteriorating.
 
-Always produce exactly 3 risks. If the scenario is mostly positive, the third risk can be forward-looking (e.g. 'risk of complacency' or 'dependency on this policy continuing').
+Produce up to 3 risks. If the scenario is mostly positive and metrics are improving, do NOT hallucinate or invent risks. You can output 1 or 2 risks (e.g., forward-looking risks like 'complacency') or even 0 if the data is entirely positive.
 """
 
 
@@ -944,9 +943,9 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
 
     briefing["performance"] = perf
 
-    # ── Ensure exactly 3 risks ─────────────────────────────────────────────────
+    # ── Ensure at least 1 risk, max 3 ──────────────────────────────────────────
     risks = briefing.get("risks", [])
-    while len(risks) < 3:
+    if not risks:
         risks.append({
             "title":    "Continued monitoring required",
             "severity": "low",

@@ -13,7 +13,7 @@ _retriever = ScenarioRetriever()
 def _mentions_layoff(text: str) -> bool:
     keywords = [
         "layoff", "lay off", "laid off", "redundan", "headcount reduction",
-        "headcount cut", "terminate", "termination", "let go", "job cut",
+        "headcount cut", "cut headcount", "terminate", "termination", "let go", "job cut",
         "retrench", "downsize", "staff reduction", "workforce reduction"
     ]
     return any(k in text.lower() for k in keywords)
@@ -24,7 +24,7 @@ def _mentions_hiring_freeze(text: str) -> bool:
         "hiring freeze", "no hiring", "pause hiring", "stop hiring",
         "halt hiring", "freeze hiring", "no backfill", "no recruitment"
     ]
-    return any(k in text.lower() for k in keywords)
+    return any(k in text.lower() for k in keywords) or _mentions_layoff(text)
 
 
 def _mentions_wlb_penalty(text: str) -> bool:
@@ -150,6 +150,15 @@ def build_config_from_llm_output(
               f"(LLM value was {llm_json.get('workload_multiplier', 'N/A')})")
     else:
         precise_workload = float(llm_json.get("workload_multiplier", 1.0))
+
+    # ── Precise Layoff Math (bypasses LLM calculation entirely) ──────────────
+    layoff = float(llm_json.get("layoff_ratio", 0.0))
+    if layoff > 0.0 and layoff < 1.0:
+        precise_workload = round(1.0 / (1.0 - layoff), 3)
+        stress_gain = round((precise_workload ** 2) * sgr * 1.5, 3) 
+        motivation_decay = round((1.0 + (layoff * 15.0)) * mdr, 3)
+        llm_json["shock_factor"] = round(layoff * 2.5, 3)
+        print(f"[intent_parser] PRECISE layoff: {layoff*100:.1f}% → workload={precise_workload:.3f}, stress={stress_gain:.2f}")
 
     config = SimulationConfig(
         workload_multiplier   = clamp(precise_workload,

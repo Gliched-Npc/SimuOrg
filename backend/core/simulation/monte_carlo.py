@@ -79,7 +79,8 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
 
     # --- Executive / domain-level summary ---
     if aggregated:
-        initial_headcount = aggregated[0]["headcount"]["mean"]
+        valid_summaries   = [s for s in all_summaries if "initial_headcount" in s]
+        initial_headcount = float(np.mean([s["initial_headcount"] for s in valid_summaries])) if valid_summaries else aggregated[0]["headcount"]["mean"]
         final_headcount   = aggregated[-1]["headcount"]["mean"]
 
         # Correct attrition formula:

@@ -459,8 +459,8 @@ export default function UploadData() {
                     {(() => {
                       const score = mlMetrics.cv_auc_mean ?? mlMetrics.auc_roc ?? mlMetrics.test_accuracy ?? null
                       const pct   = score != null ? Math.round(score * 100) : null
-                      const color = pct >= 80 ? '#4ade80' : pct >= 65 ? '#fbbf24' : '#f87171'
-                      const label = pct >= 80 ? 'High Confidence' : pct >= 65 ? 'Moderate Confidence' : 'Low Confidence'
+                      const color = pct >= 75 ? '#4ade80' : pct >= 60 ? '#fbbf24' : '#f87171'
+                      const label = pct >= 75 ? 'High Confidence' : pct >= 60 ? 'Moderate Confidence' : 'Low Confidence'
                       return pct != null ? (
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '2.2rem', fontWeight: 900, color, lineHeight: 1 }}>{pct}%</div>
@@ -484,7 +484,7 @@ export default function UploadData() {
                       .filter(m => m.key != null)
                       .map(({ label, key, desc }) => {
                         const pct = Math.round(key * 100)
-                        const color = pct >= 85 ? '#4ade80' : pct >= 70 ? '#fbbf24' : '#f87171'
+                        const color = pct >= 75 ? '#4ade80' : pct >= 60 ? '#fbbf24' : '#f87171'
                         return (
                           <div key={label}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>

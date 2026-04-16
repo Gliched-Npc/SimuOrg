@@ -166,7 +166,7 @@ def run_simulation(
 
         # Layoffs
         layoff_agents = []
-        if config.layoff_ratio > 0:
+        if config.layoff_ratio > 0 and month == 1:
             active     = [a for a in agents if a.is_active]
             n_layoffs  = int(len(active) * config.layoff_ratio)
             layoff_targets = sorted(active, key=lambda a: a.performance_rating)[:n_layoffs]

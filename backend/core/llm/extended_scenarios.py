@@ -1034,4 +1034,301 @@ Output:
 }
 """
     },
+    {
+        "query": "cut headcount by 8% and redistribute workload to remaining staff",
+        "content": """
+User: "cut headcount by 8% and redistribute workload to remaining staff"
+Output:
+{
+  "workload_multiplier": 1.09,
+  "stress_gain_rate_multiplier": 2.0,
+  "motivation_decay_rate_multiplier": 3.0,
+  "shock_factor": 0.4,
+  "hiring_active": false,
+  "layoff_ratio": 0.08,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "salary_increase_pct": 0.0,
+  "overtime_reduction_pct": 0.0,
+  "_justification": {
+    "workload_multiplier": "1/0.92 = 1.087 — 100% of work now carried by 92% of staff",
+    "stress_gain_rate_multiplier": "2.0x — moderate overburden with layoff fear",
+    "motivation_decay_rate_multiplier": "3.0x — survivor guilt + workload increase",
+    "shock_factor": "0.4 — 8% cut is visible and creates real fear among peers",
+    "hiring_active": "false — cutting headcount means no backfill",
+    "layoff_ratio": "0.08 — explicit 8% headcount reduction",
+    "note": "Voluntary attrition may appear LOWER than a smaller cut due to fear suppression. True loss = voluntary + 8% forced."
+  }
+}
+"""
+    },
+    {
+        "query": "cut headcount by 24% and redistribute workload to remaining staff",
+        "content": """
+User: "cut headcount by 24% and redistribute workload to remaining staff"
+Output:
+{
+  "workload_multiplier": 1.32,
+  "stress_gain_rate_multiplier": 5.5,
+  "motivation_decay_rate_multiplier": 5.5,
+  "shock_factor": 0.6,
+  "hiring_active": false,
+  "layoff_ratio": 0.24,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "salary_increase_pct": 0.0,
+  "overtime_reduction_pct": 0.0,
+  "_justification": {
+    "workload_multiplier": "1/0.76 = 1.316 — 100% of work now carried by 76% of staff, heavy overburden",
+    "stress_gain_rate_multiplier": "5.5x — near-panic level. Large layoffs create job insecurity cascade",
+    "motivation_decay_rate_multiplier": "5.5x — severe survivor guilt, exhaustion, no hope of workload relief",
+    "shock_factor": "0.6 — mass departure, very high fear contagion across all teams",
+    "hiring_active": "false — no backfill in a cost-cutting headcount reduction",
+    "layoff_ratio": "0.24 — explicit 24% headcount reduction",
+    "attrition_note": "Voluntary attrition will be SUPPRESSED vs a smaller cut. Survivors are afraid to quit. True workforce loss = voluntary + 24% forced exits."
+  }
+}
+"""
+    },
+    {
+        "query": "15% staff reduction next quarter, no backfill",
+        "content": """
+User: "15% staff reduction next quarter, no backfill"
+Output:
+{
+  "workload_multiplier": 1.3,
+  "stress_gain_rate_multiplier": 5.5,
+  "motivation_decay_rate_multiplier": 4.5,
+  "shock_factor": 0.6,
+  "hiring_active": false,
+  "layoff_ratio": 0.15,
+  "duration_months": 3,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "workload_multiplier": "survivors absorb work from 15% reduction",
+    "stress_gain_rate_multiplier": "5.5x panic — job insecurity cascade",
+    "motivation_decay_rate_multiplier": "4.5x survivor guilt and fear of next round",
+    "shock_factor": "0.6 high contagion — each departure triggers visible fear",
+    "hiring_active": "frozen — layoff scenario, no backfill",
+    "duration_months": "3 — user said next quarter"
+  }
+}
+"""
+    },
+    {
+        "query": "hiring freeze for the year",
+        "content": """
+User: "hiring freeze for the year"
+Output:
+{
+  "workload_multiplier": 1.25,
+  "stress_gain_rate_multiplier": 2.8,
+  "motivation_decay_rate_multiplier": 3.0,
+  "shock_factor": 0.25,
+  "hiring_active": false,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "workload_multiplier": "1.25 — work falls on survivors",
+    "stress_gain_rate_multiplier": "2.8x — overburden from no backfill",
+    "motivation_decay_rate_multiplier": "3.0x — overloaded with no growth prospects",
+    "duration_months": "12 — user said for the year"
+  }
+}
+"""
+    },
+    {
+        "query": "full remote work policy",
+        "content": """
+User: "full remote work policy"
+Output:
+{
+  "workload_multiplier": 0.9,
+  "stress_gain_rate_multiplier": 0.6,
+  "motivation_decay_rate_multiplier": 0.8,
+  "shock_factor": 0.15,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.4,
+  "_justification": {
+    "stress_gain_rate_multiplier": "0.6x — commute relief, home environment",
+    "motivation_decay_rate_multiplier": "0.8x — slight isolation offsets autonomy benefit",
+    "wlb_boost": "0.4 — schedule flexibility improves work-life balance"
+  }
+}
+"""
+    },
+    {
+        "query": "flexible working hours, employees choose schedule",
+        "content": """
+User: "flexible working hours, employees choose schedule"
+Output:
+{
+  "workload_multiplier": 0.85,
+  "stress_gain_rate_multiplier": 0.7,
+  "motivation_decay_rate_multiplier": 0.5,
+  "shock_factor": 0.1,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.6,
+  "_justification": {
+    "motivation_decay_rate_multiplier": "0.5x — high autonomy strongly retains motivation",
+    "wlb_boost": "0.6 — schedule autonomy is the strongest WLB driver"
+  }
+}
+"""
+    },
+    {
+        "query": "mandatory overtime, 1.5x pay",
+        "content": """
+User: "mandatory overtime, 1.5x pay"
+Output:
+{
+  "workload_multiplier": 1.45,
+  "stress_gain_rate_multiplier": 1.8,
+  "motivation_decay_rate_multiplier": 0.4,
+  "shock_factor": 0.3,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 2.5,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "workload_multiplier": "1.45 — intensive overtime hours",
+    "motivation_decay_rate_multiplier": "0.4x — pay significantly cushions the burden",
+    "bonus": "2.5 — strongest financial motivator, 1.5x pay rate"
+  }
+}
+"""
+    },
+    {
+        "query": "mandatory overtime, no extra pay",
+        "content": """
+User: "mandatory overtime, no extra pay"
+Output:
+{
+  "workload_multiplier": 1.45,
+  "stress_gain_rate_multiplier": 2.5,
+  "motivation_decay_rate_multiplier": 3.5,
+  "shock_factor": 0.4,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "stress_gain_rate_multiplier": "2.5x — overwork with no compensation",
+    "motivation_decay_rate_multiplier": "3.5x — unpaid overwork destroys morale"
+  }
+}
+"""
+    },
+    {
+        "query": "promotion freeze, no raises this year",
+        "content": """
+User: "promotion freeze, no raises this year"
+Output:
+{
+  "workload_multiplier": 1.0,
+  "stress_gain_rate_multiplier": 1.0,
+  "motivation_decay_rate_multiplier": 4.0,
+  "shock_factor": 0.3,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "motivation_decay_rate_multiplier": "4.0x — stagnation devastates career identity and future",
+    "shock_factor": "0.3 — frustrated employees quit, affecting remaining peers"
+  }
+}
+"""
+    },
+    {
+        "query": "increase workload by 25%",
+        "content": """
+User: "increase workload by 25%"
+Output:
+{
+  "workload_multiplier": 1.25,
+  "stress_gain_rate_multiplier": 2.5,
+  "motivation_decay_rate_multiplier": 1.5,
+  "shock_factor": 0.1,
+  "hiring_active": true,
+  "layoff_ratio": 0.0,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "workload_multiplier": "1.25 — explicit 25% workload increase",
+    "stress_gain_rate_multiplier": "2.5x — elevated pressure from higher load",
+    "motivation_decay_rate_multiplier": "1.5x — sustained overwork gradually erodes morale",
+    "shock_factor": "0.1 — mild contagion, some peer discussion about increased workload",
+    "hiring_active": "true — workload increase does NOT imply hiring freeze",
+    "layoff_ratio": "0.0 — user did not mention layoffs, redundancies, or headcount cuts",
+    "wlb_boost": "0.0 — no schedule or flexibility change mentioned"
+  }
+}
+"""
+    },
+    {
+        "query": "layoffs — 15% of staff cut",
+        "content": """
+User: "layoffs — 15% of staff cut"
+Output:
+{
+  "workload_multiplier": 1.0,
+  "stress_gain_rate_multiplier": 2.0,
+  "motivation_decay_rate_multiplier": 3.0,
+  "shock_factor": 0.5,
+  "hiring_active": false,
+  "layoff_ratio": 0.15,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "stress_gain_rate_multiplier": "2.0x — fear of job loss increases stress",
+    "motivation_decay_rate_multiplier": "3.0x — uncertainty and survivor guilt reduce morale",
+    "shock_factor": "0.5 — layoffs create significant fear contagion",
+    "hiring_active": "false — layoffs imply hiring freeze or reduced hiring",
+    "layoff_ratio": "0.15 — explicit 15% reduction in workforce"
+  }
+}
+"""
+    },
+    {
+        "query": "layoffs — 15% of staff cut, but company announces 20% raises for remaining employees",
+        "content": """
+User: "layoffs — 15% of staff cut, but company announces 20% raises for remaining employees"
+Output:
+{
+  "workload_multiplier": 1.0,
+  "stress_gain_rate_multiplier": 1.5,
+  "motivation_decay_rate_multiplier": 1.0,
+  "shock_factor": 0.3,
+  "hiring_active": false,
+  "layoff_ratio": 0.15,
+  "duration_months": 12,
+  "bonus": 0.0,
+  "wlb_boost": 0.0,
+  "_justification": {
+    "stress_gain_rate_multiplier": "1.5x — layoffs increase stress, but raises mitigate it",
+    "motivation_decay_rate_multiplier": "1.0x — financial security offsets morale drop",
+    "shock_factor": "0.3 — mixed signals create moderate uncertainty",
+    "hiring_active": "false — layoffs imply hiring freeze",
+    "layoff_ratio": "0.15 — explicit 15% reduction in workforce"
+  }
+}
+"""
+    }
 ]

@@ -71,34 +71,13 @@ export default function BriefingPanel({ result }) {
           </p>
         </div>
 
-        <button
-          onClick={() => window.print()}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '0.5rem 1rem',
-            borderRadius: 10,
-            background: 'rgba(137,44,220,0.15)',
-            border: '1px solid rgba(188,111,241,0.3)',
-            color: '#BC6FF1',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(137,44,220,0.25)' }}
-          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(137,44,220,0.15)' }}
-        >
-          <Printer size={16} /> Export PDF
-        </button>
       </div>
 
       {/* ── Top Level Intelligence ────────────────────────── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '1rem',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: '0.75rem',
         marginBottom: '1.5rem',
       }}>
         {[
@@ -111,7 +90,15 @@ export default function BriefingPanel({ result }) {
             icon: Activity
           },
           {
-            label: 'Attrition Δ',
+            label: 'Avg Headcount Δ',
+            value: analytics.headcount?.pct_change != null 
+              ? `${analytics.headcount.pct_change > 0 ? '+' : ''}${analytics.headcount.pct_change}%` 
+              : '—',
+            color: analytics.headcount?.pct_change >= -5 ? '#4ade80' : '#f87171',
+            icon: analytics.headcount?.pct_change >= 0 ? TrendingUp : TrendingDown
+          },
+          {
+            label: 'Voluntary Quits Δ',
             value: analytics.attrition?.vs_baseline_pts != null 
               ? `${analytics.attrition.vs_baseline_pts > 0 ? '+' : ''}${analytics.attrition.vs_baseline_pts} pts` 
               : '—',
