@@ -1,15 +1,21 @@
 # backend/ml/attrition_model.py
 
-import pandas as pd
+
 import numpy as np
-import joblib
-import os
+import pandas as pd
+from sklearn.isotonic import IsotonicRegression
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.preprocessing import LabelEncoder
 from sqlmodel import Session, select
 from xgboost import XGBClassifier
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.metrics import classification_report, accuracy_score, roc_auc_score, f1_score, precision_score, recall_score
-from sklearn.preprocessing import LabelEncoder
-from sklearn.isotonic import IsotonicRegression
 
 from backend.db.database import engine
 from backend.db.models import Employee
@@ -33,8 +39,8 @@ BASE_FEATURES = [
     "satisfaction_composite",
     "career_velocity",
     "loyalty_index",
-    "income_vs_level",    # monthly_income / job_level — flags underpaid employees
-    "tenure_stability",   # years_with_curr_manager / years_at_company — manager instability
+    "income_vs_level",  # monthly_income / job_level — flags underpaid employees
+    "tenure_stability",  # years_with_curr_manager / years_at_company — manager instability
 ]
 
 # Bonus features — used only if the uploaded dataset contains them
@@ -59,9 +65,7 @@ LABEL_ENCODERS: dict = {}
 
 def load_data_from_db():
     with Session(engine) as session:
-        employees = session.exec(
-            select(Employee).order_by(Employee.employee_id)
-        ).all()
+        employees = session.exec(select(Employee).order_by(Employee.employee_id)).all()
     df = pd.DataFrame([e.model_dump() for e in employees])
     return df
 
@@ -70,26 +74,28 @@ def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
     """Create stronger signals from existing columns.
     encoders: pre-fitted LabelEncoders for inference (None = fit at training time).
     """
-    df['stagnation_score']       = df['years_since_last_promotion'] / (df['years_at_company'] + 1)
-    sat_cols = ['job_satisfaction', 'work_life_balance', 'environment_satisfaction']
-    if 'job_involvement' in df.columns: sat_cols.append('job_involvement')
-    if 'performance_rating' in df.columns: sat_cols.append('performance_rating')
-    df['satisfaction_composite'] = df[sat_cols].mean(axis=1)
-    
-    df['career_velocity']  = df['job_level'] / (df['total_working_years'] + 1)
-    df['loyalty_index']    = df['years_at_company'] / (df['total_working_years'] + 1)
+    df["stagnation_score"] = df["years_since_last_promotion"] / (df["years_at_company"] + 1)
+    sat_cols = ["job_satisfaction", "work_life_balance", "environment_satisfaction"]
+    if "job_involvement" in df.columns:
+        sat_cols.append("job_involvement")
+    if "performance_rating" in df.columns:
+        sat_cols.append("performance_rating")
+    df["satisfaction_composite"] = df[sat_cols].mean(axis=1)
+
+    df["career_velocity"] = df["job_level"] / (df["total_working_years"] + 1)
+    df["loyalty_index"] = df["years_at_company"] / (df["total_working_years"] + 1)
 
     # Engineered: flag underpaid employees (lower income relative to job level)
-    df['income_vs_level']  = df['monthly_income'] / (df['job_level'] * 1000 + 1)
+    df["income_vs_level"] = df["monthly_income"] / (df["job_level"] * 1000 + 1)
     # Engineered: manager tenure relative to company tenure (instability indicator)
-    df['tenure_stability'] = df['years_with_curr_manager'] / (df['years_at_company'] + 1)
+    df["tenure_stability"] = df["years_with_curr_manager"] / (df["years_at_company"] + 1)
 
     # Label-encode categorical optional features.
     # Training (encoders=None): fit + register in LABEL_ENCODERS global.
     # Inference (encoders provided): apply saved mapping so codes are consistent.
     cat_cols = [
         ("department", "department_encoded"),
-        ("job_role",   "job_role_encoded"),
+        ("job_role", "job_role_encoded"),
     ]
     for col, enc_col in cat_cols:
         if col not in df.columns or df[col].isna().all():
@@ -121,7 +127,6 @@ def get_active_features(df: pd.DataFrame) -> list[str]:
     return features
 
 
-
 # Minimum precision floor for the recall-optimised threshold tuner.
 # At 0.50: for every 10 flagged employees, at least 5 are real quitters.
 # Raised from 0.30 → 0.50 after calibration improved precision significantly.
@@ -135,34 +140,38 @@ def tune_threshold(model, X_val, y_val) -> float:
     Falls back to best-F1 threshold if the precision floor can never be satisfied.
     """
     probs = model.predict_proba(X_val)[:, 1]
-    best_threshold     = 0.5
-    best_recall        = 0.0
+    best_threshold = 0.5
+    best_recall = 0.0
     fallback_threshold = 0.5
-    fallback_f1        = 0.0
+    fallback_f1 = 0.0
 
     for t in np.arange(0.05, 0.85, 0.01):
         preds = (probs > t).astype(int)
         if preds.sum() == 0:
             continue
         prec = precision_score(y_val, preds, zero_division=0)
-        rec  = recall_score(y_val, preds, zero_division=0)
-        f1   = f1_score(y_val, preds, zero_division=0)
+        rec = recall_score(y_val, preds, zero_division=0)
+        f1 = f1_score(y_val, preds, zero_division=0)
 
         if f1 > fallback_f1:
-            fallback_f1        = f1
+            fallback_f1 = f1
             fallback_threshold = round(t, 2)
 
         if prec >= MIN_PRECISION_FLOOR and rec > best_recall:
-            best_recall    = rec
+            best_recall = rec
             best_threshold = round(t, 2)
 
     if best_recall == 0.0:
         best_threshold = fallback_threshold
-        print(f"  -> Precision floor not met - using best-F1 threshold: {best_threshold} (F1: {fallback_f1:.3f})")
+        print(
+            f"  -> Precision floor not met - using best-F1 threshold: {best_threshold} (F1: {fallback_f1:.3f})"
+        )
     else:
         val_preds = (probs > best_threshold).astype(int)
-        val_prec  = precision_score(y_val, val_preds, zero_division=0)
-        print(f"  -> Recall-optimised threshold: {best_threshold} (Recall: {best_recall:.3f}, Precision: {val_prec:.3f})")
+        val_prec = precision_score(y_val, val_preds, zero_division=0)
+        print(
+            f"  -> Recall-optimised threshold: {best_threshold} (Recall: {best_recall:.3f}, Precision: {val_prec:.3f})"
+        )
 
     return best_threshold
 
@@ -175,7 +184,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     df = load_data_from_db()
     print("Rows loaded from DB:", len(df))
 
-    df = df.drop(columns=['employee_id', 'simulation_id'], errors='ignore')
+    df = df.drop(columns=["employee_id", "simulation_id"], errors="ignore")
     print("After column drop:", len(df))
 
     # df = df.drop_duplicates()
@@ -191,12 +200,15 @@ def train_attrition_model(pre_clean_metrics: dict = None):
 
     # Determine which features to use based on this dataset
     FEATURES = get_active_features(df)
-    active_base     = [f for f in FEATURES if f in BASE_FEATURES]
+    active_base = [f for f in FEATURES if f in BASE_FEATURES]
     active_optional = [f for f in FEATURES if f in OPTIONAL_FEATURES]
-    dropped_base    = [f for f in BASE_FEATURES if f not in FEATURES]
-    print(f"  >> Using {len(FEATURES)} features "
-          f"({len(active_base)} base + {len(active_optional)} optional"
-          + (f", dropped {len(dropped_base)}: {dropped_base}" if dropped_base else "") + ")")
+    dropped_base = [f for f in BASE_FEATURES if f not in FEATURES]
+    print(
+        f"  >> Using {len(FEATURES)} features "
+        f"({len(active_base)} base + {len(active_optional)} optional"
+        + (f", dropped {len(dropped_base)}: {dropped_base}" if dropped_base else "")
+        + ")"
+    )
 
     X = df[FEATURES]
     y = df[TARGET]
@@ -246,20 +258,20 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         learning_rate=0.05,
         scale_pos_weight=capped_spw_quick,
         random_state=42,
-        eval_metric="logloss", verbosity=0,
+        eval_metric="logloss",
+        verbosity=0,
     )
     # For very small datasets, ensure class counts support the chosen number of folds.
     min_class_count = min(negative, positive)
     quick_cv_folds = max(2, min(3, min_class_count))  # 2–3 folds
-    quick_cv = cross_val_score(quick_model, X_train, y_train, cv=quick_cv_folds, scoring='roc_auc')
-    signal_strength = quick_cv.mean()
+    cross_val_score(quick_model, X_train, y_train, cv=quick_cv_folds, scoring="roc_auc")
 
     # -- Imbalance strategy: cost-sensitive learning --
     # scale_pos_weight is derived from the actual class ratio in THIS dataset.
     # It changes per uploaded dataset (data-driven, not hardcoded).
     # More stable than SMOTE: no synthetic data, no artificial overfitting.
     X_train_final, y_train_final = X_train, y_train
-    spw_main = round(min(imbalance_ratio ** 0.5, 10.0), 2)
+    spw_main = round(min(imbalance_ratio**0.5, 10.0), 2)
     strategy = f"cost-sensitive (scale_pos_weight={spw_main})"
     print(f"  -> Imbalance ratio: {imbalance_ratio} Stays per Quitter | {strategy}")
 
@@ -311,36 +323,38 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     # Isotonic regression learns a monotonic mapping: raw_score → true_probability
     # using the val set. This is version-independent and doesn't require refitting.
     raw_val_probs = base_model.predict_proba(X_val)[:, 1]
-    calibrator = IsotonicRegression(out_of_bounds='clip')
+    calibrator = IsotonicRegression(out_of_bounds="clip")
     calibrator.fit(raw_val_probs, y_val)
 
     # Thin wrapper so the rest of the code calls model.predict_proba(X) as normal
     class _CalibratedModel:
         def __init__(self, base, cal):
             self.base_model = base
-            self.calibrator  = cal
+            self.calibrator = cal
             # Expose feature_importances_ so CV / any downstream code still works
             self.feature_importances_ = base.feature_importances_
 
         def predict_proba(self, X):
-            raw   = self.base_model.predict_proba(X)[:, 1]
-            cal   = self.calibrator.predict(raw)
+            raw = self.base_model.predict_proba(X)[:, 1]
+            cal = self.calibrator.predict(raw)
             return np.column_stack([1 - cal, cal])
 
     model = _CalibratedModel(base_model, calibrator)
-    print(f"  >> Probabilities calibrated via isotonic regression on val set ({len(X_val)} samples)")
+    print(
+        f"  >> Probabilities calibrated via isotonic regression on val set ({len(X_val)} samples)"
+    )
 
     print("--- Tuning decision threshold on validation set...")
     best_threshold = tune_threshold(model, X_val, y_val)
 
-    test_probs    = model.predict_proba(X_test)[:, 1]
-    y_pred_test   = (test_probs > best_threshold).astype(int)
-    train_probs   = model.predict_proba(X_train)[:, 1]
-    y_pred_train  = (train_probs > best_threshold).astype(int)
+    test_probs = model.predict_proba(X_test)[:, 1]
+    y_pred_test = (test_probs > best_threshold).astype(int)
+    train_probs = model.predict_proba(X_train)[:, 1]
+    y_pred_train = (train_probs > best_threshold).astype(int)
 
     train_accuracy = accuracy_score(y_train, y_pred_train)
-    test_accuracy  = accuracy_score(y_test, y_pred_test)
-    auc            = roc_auc_score(y_test, test_probs)
+    test_accuracy = accuracy_score(y_test, y_pred_test)
+    auc = roc_auc_score(y_test, test_probs)
 
     print("\n=== Test Performance (held-out, never seen during training or tuning):")
     print(classification_report(y_test, y_pred_test, target_names=["Stays", "Quits"]))
@@ -349,7 +363,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     print(f"\n=== Training Performance (pre-{strategy} train set):")
     print(classification_report(y_train, y_pred_train, target_names=["Stays", "Quits"]))
 
-    print(f"\n=== Accuracy Summary:")
+    print("\n=== Accuracy Summary:")
     print(f"  Training Accuracy : {train_accuracy*100:.2f}%")
     print(f"  Test Accuracy     : {test_accuracy*100:.2f}%")
     print(f"  Overfitting Gap   : {(train_accuracy - test_accuracy)*100:.2f}%")
@@ -364,7 +378,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        min_child_weight=5,       # kept in sync with main model
+        min_child_weight=5,  # kept in sync with main model
         reg_alpha=1.0,
         reg_lambda=2.0,
         random_state=42,
@@ -372,7 +386,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         verbosity=0,
     )
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(cv_model, X, y, cv=cv, scoring='roc_auc')
+    cv_scores = cross_val_score(cv_model, X, y, cv=cv, scoring="roc_auc")
     print(f"  AUC per fold: {[round(s, 4) for s in cv_scores]}")
     print(f"  Mean AUC:     {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 
@@ -394,8 +408,15 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         rec = "Simulation shows directional trends. Treat exact numbers with caution as the model has moderate predictive power."
     else:
         # Extract top feature names for XAI explanations
-        top_names = [f["feature"].replace('_', ' ').replace('encoded', '').title().strip() for f in top_features]
-        xai_context = f"Our AI evaluated {', '.join(top_names)} as priority drivers, but " if len(top_names) >= 2 else "Our AI scanned all available metrics, but "
+        top_names = [
+            f["feature"].replace("_", " ").replace("encoded", "").title().strip()
+            for f in top_features
+        ]
+        xai_context = (
+            f"Our AI evaluated {', '.join(top_names)} as priority drivers, but "
+            if len(top_names) >= 2
+            else "Our AI scanned all available metrics, but "
+        )
 
         # Investigate WHY the signal is weak to give actionable business and data recommendations
         if imbalance_ratio > 4.0:
@@ -407,47 +428,48 @@ def train_attrition_model(pre_clean_metrics: dict = None):
             rec = f"Predictive Signal is Weak: {xai_context}your employee departures still appear largely random based on the provided data. SOLUTION: [OPTION 1] Supplement your data with Engagement Survey scores or external Compensation Benchmarks to discover hidden retention drivers. [OPTION 2] Proceed anyway, but projections are unreliable."
 
     quality_report = {
-        "auc_roc":             round(float(auc), 4),
-        "cv_auc_mean":         round(cv_mean, 4),
-        "cv_auc_std":          round(float(cv_scores.std()), 4),
-        "test_accuracy":       round(float(test_accuracy), 4),
-        "train_accuracy":      round(float(train_accuracy), 4),
-        "features_used":       len(FEATURES),
-        "bonus_features":      [f for f in OPTIONAL_FEATURES if f in FEATURES],
-        "top_drivers":         top_features,
-        "signal_strength":     (
-            "strong"   if cv_mean >= 0.80 else
-            "moderate" if cv_mean >= 0.65 else
-            "weak"
+        "auc_roc": round(float(auc), 4),
+        "cv_auc_mean": round(cv_mean, 4),
+        "cv_auc_std": round(float(cv_scores.std()), 4),
+        "test_accuracy": round(float(test_accuracy), 4),
+        "train_accuracy": round(float(train_accuracy), 4),
+        "features_used": len(FEATURES),
+        "bonus_features": [f for f in OPTIONAL_FEATURES if f in FEATURES],
+        "top_drivers": top_features,
+        "signal_strength": (
+            "strong" if cv_mean >= 0.80 else "moderate" if cv_mean >= 0.65 else "weak"
         ),
         "simulation_reliable": bool(cv_mean >= 0.65),
-        "recommendation":      rec,
+        "recommendation": rec,
     }
-    
+
     # Inject external transparency metrics if provided
     if pre_clean_metrics:
-        quality_report.update({
-            "trust_score":    pre_clean_metrics.get("trust_score", 100),
-            "cleaning_audit": pre_clean_metrics.get("cleaning_audit", []),
-            "data_status":    pre_clean_metrics.get("status", "healthy")
-        })
+        quality_report.update(
+            {
+                "trust_score": pre_clean_metrics.get("trust_score", 100),
+                "cleaning_audit": pre_clean_metrics.get("cleaning_audit", []),
+                "data_status": pre_clean_metrics.get("status", "healthy"),
+            }
+        )
     else:
         quality_report["trust_score"] = 100
         quality_report["cleaning_audit"] = []
 
     model_payload = {
-        "model":          model.base_model,
-        "calibrator":     model.calibrator,
-        "threshold":      best_threshold,
-        "features":       FEATURES,
+        "model": model.base_model,
+        "calibrator": model.calibrator,
+        "threshold": best_threshold,
+        "features": FEATURES,
         "label_encoders": LABEL_ENCODERS,
     }
-    
+
     print("[done] Model packed for DB.")
     print("[done] Quality report packed for DB.")
 
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact
+
     save_artifact("quit_model", model_payload, "pkl")
     save_artifact("quality", quality_report, "json")
 
@@ -455,4 +477,4 @@ def train_attrition_model(pre_clean_metrics: dict = None):
 
 
 if __name__ == "__main__":
-    train_attrition_model() 
+    train_attrition_model()

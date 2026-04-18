@@ -5,7 +5,7 @@
 # Routes and Celery tasks call this — never core directly.
 
 from backend.core.simulation.monte_carlo import run_monte_carlo
-from backend.core.simulation.policies import SimulationConfig, get_policy, POLICIES
+from backend.core.simulation.policies import POLICIES, get_policy
 
 
 def run_simulation_job(
@@ -66,38 +66,42 @@ def run_training_job(quality_report: dict = None) -> dict:
     Run full ML training pipeline.
     Returns calibration result.
     """
+    import backend.core.simulation.agent as _agent_module
     from backend.core.ml.attrition_model import train_attrition_model
     from backend.core.ml.burnout_estimator import train_burnout_estimator
     from backend.core.ml.calibration import calibrate
-    import backend.core.simulation.agent as _agent_module
 
-    pre_clean = {
-        "trust_score":    quality_report.get("trust_score", 100),
-        "cleaning_audit": quality_report.get("cleaning_audit", []),
-        "status":         quality_report.get("status", "healthy"),
-    } if quality_report else None
+    pre_clean = (
+        {
+            "trust_score": quality_report.get("trust_score", 100),
+            "cleaning_audit": quality_report.get("cleaning_audit", []),
+            "status": quality_report.get("status", "healthy"),
+        }
+        if quality_report
+        else None
+    )
 
     model_quality = train_attrition_model(pre_clean_metrics=pre_clean)
     train_burnout_estimator()
-    _agent_module._quit_model_cache = None     # bust lazy-load cache
+    _agent_module._quit_model_cache = None  # bust lazy-load cache
     _agent_module._quit_features_cache = None  # force reload of schema
     _agent_module._quit_encoders_cache = None  # force reload of encoders
     cal = calibrate()
 
     return {
         "model": {
-            "auc_roc":        model_quality.get("auc_roc"),
-            "cv_auc_mean":    model_quality.get("cv_auc_mean"),
-            "features":       model_quality.get("features_used"),
-            "signal":         model_quality.get("signal_strength"),
+            "auc_roc": model_quality.get("auc_roc"),
+            "cv_auc_mean": model_quality.get("cv_auc_mean"),
+            "features": model_quality.get("features_used"),
+            "signal": model_quality.get("signal_strength"),
             "recommendation": model_quality.get("recommendation"),
         },
         "calibration": {
             "annual_attrition_rate": cal.get("annual_attrition_rate"),
             "empirical_attrition_rate": cal.get("empirical_attrition_rate"),
-            "monthly_natural_rate":  cal.get("monthly_natural_rate"),
-            "quit_threshold":        cal.get("quit_threshold"),
-            "calib_quality":         cal.get("calib_quality"),
-            "calib_attrition_std":   cal.get("calib_attrition_std"),
+            "monthly_natural_rate": cal.get("monthly_natural_rate"),
+            "quit_threshold": cal.get("quit_threshold"),
+            "calib_quality": cal.get("calib_quality"),
+            "calib_attrition_std": cal.get("calib_attrition_std"),
         },
     }

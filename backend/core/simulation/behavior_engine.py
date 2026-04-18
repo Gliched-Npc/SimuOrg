@@ -1,17 +1,19 @@
 # backend/simulation/behavior_engine.py
 
 import math
+
 from backend.core.simulation.agent import EmployeeAgent
-from backend.core.simulation.org_graph import build_org_graph, OrgGraph
-import json
+from backend.core.simulation.org_graph import OrgGraph
 
 _calibration_cache = None
+
 
 def _load_calibration():
     """Lazy-load calibration — re-reads after retrain without server restart."""
     global _calibration_cache
     if _calibration_cache is None:
         from backend.storage.storage import load_artifact
+
         data = load_artifact("calibration")
         if data:
             _calibration_cache = data
@@ -50,6 +52,7 @@ def clear_calibration_cache():
 def _c(key, default):
     return _load_calibration().get(key, default)
 
+
 def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float, float]:
     """
     Read stress from neighbors weighted by edge weight.
@@ -70,13 +73,15 @@ def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float
     return neighbor_stress, comm_quality
 
 
-def update_agent_state(agent: EmployeeAgent,
-                       G: OrgGraph,
-                       workload_multiplier: float,
-                       motivation_decay_rate: float,
-                       stress_gain_rate: float = 1.0,
-                       bonus: float = 0.0,
-                       wlb_boost: float = 0.0):
+def update_agent_state(
+    agent: EmployeeAgent,
+    G: OrgGraph,
+    workload_multiplier: float,
+    motivation_decay_rate: float,
+    stress_gain_rate: float = 1.0,
+    bonus: float = 0.0,
+    wlb_boost: float = 0.0,
+):
     """
     Update one agent's behavioral state for one timestep.
     All constants from calibration.json via lazy loader — picks up retrain without restart.
@@ -85,29 +90,29 @@ def update_agent_state(agent: EmployeeAgent,
         return
 
     # Resolve constants lazily each call (cached after first load)
-    STRESS_GAIN_RATE       = _c("behavior_stress_gain_rate", _c("stress_gain_rate", 0.0132))
-    RECOVERY_RATE          = _c("recovery_rate", 0.0104)
+    STRESS_GAIN_RATE = _c("behavior_stress_gain_rate", _c("stress_gain_rate", 0.0132))
+    RECOVERY_RATE = _c("recovery_rate", 0.0104)
     NEIGHBOR_STRESS_WEIGHT = _c("neighbor_stress_weight", 0.01)
-    FATIGUE_STRESS_WEIGHT  = _c("fatigue_stress_weight", 0.005)
-    COMM_QUALITY_CAP       = _c("comm_quality_cap", 5.0)
-    COMM_QUALITY_BENEFIT   = _c("comm_quality_benefit", 0.001)
-    FATIGUE_GAIN_RATE      = _c("fatigue_gain_rate", 0.03)
-    FATIGUE_RECOVERY_RATE  = _c("fatigue_recovery_rate", 0.01)
+    FATIGUE_STRESS_WEIGHT = _c("fatigue_stress_weight", 0.005)
+    COMM_QUALITY_CAP = _c("comm_quality_cap", 5.0)
+    COMM_QUALITY_BENEFIT = _c("comm_quality_benefit", 0.001)
+    FATIGUE_GAIN_RATE = _c("fatigue_gain_rate", 0.03)
+    FATIGUE_RECOVERY_RATE = _c("fatigue_recovery_rate", 0.01)
     FATIGUE_STRESS_TRIGGER = _c("fatigue_stress_trigger", 0.5)
     MOTIVATION_RECOVERY_RATE = _c("motivation_recovery_rate", 0.01)
     MOTIVATION_THRESHOLD = _c("motivation_threshold", 0.15)
-    WLB_STRESS_BUFFER      = _c("wlb_stress_buffer", 0.2)
+    WLB_STRESS_BUFFER = _c("wlb_stress_buffer", 0.2)
     WLB_STRESS_SENSITIVITY = _c("wlb_stress_sensitivity", 1.5)
-    WLB_DROP_RATE          = _c("wlb_drop_rate", 0.15)
-    WLB_RECOVERY_RATE      = _c("wlb_recovery_rate", 0.1)
-    BURNOUT_PROD_PENALTY   = _c("burnout_productivity_penalty", 0.97)
+    WLB_DROP_RATE = _c("wlb_drop_rate", 0.15)
+    WLB_RECOVERY_RATE = _c("wlb_recovery_rate", 0.1)
+    BURNOUT_PROD_PENALTY = _c("burnout_productivity_penalty", 0.97)
 
     # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)
 
     # Quadratic workload scaling — high pressure is meaningfully worse than linear
     # workload=1.0 → 1.0x | workload=1.3 → 1.69x | workload=1.5 → 2.25x
-    workload_stress_factor = workload_multiplier ** 2
+    workload_stress_factor = workload_multiplier**2
 
     # Stress accumulates each month. Net gain is positive under pressure.
     # Financial compensation (salary raise / overtime pay) provides a stress dampener.
@@ -151,7 +156,9 @@ def update_agent_state(agent: EmployeeAgent,
         workload_decay = motivation_decay_rate * (workload_multiplier - 1.0) * 1.5
         agent.motivation = max(agent.motivation - workload_decay, 0.0)
     else:
-        agent.motivation = min(agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0)
+        agent.motivation = min(
+            agent.motivation + MOTIVATION_RECOVERY_RATE, agent.baseline_satisfaction / 4.0
+        )
 
     # Financial compensation (overtime pay or salary raise) — phases out with fatigue.
     # Uses a log-scale lift so a large raise (bonus=2.5) is clearly better than a
@@ -162,10 +169,21 @@ def update_agent_state(agent: EmployeeAgent,
     effective_bonus = 0.0
     if bonus > 0.0:
         fatigue_discount = max(0.0, 1.0 - agent.fatigue)
-        effective_bonus = math.log1p(bonus) * fatigue_discount  # log1p(x) = ln(1+x)
+
+        # Non-linear penalty: money loses its effectiveness if the employee is deeply burned out
+        burnout_factor = 1.0
+        if agent.stress > agent.burnout_limit:
+            overshoot = (agent.stress - agent.burnout_limit) / max(1.0 - agent.burnout_limit, 0.01)
+            # Quadratic decay. If overshoot is 0.5 (halfway to guaranteed break), bonus loses 25% power.
+            # If overshoot is >0.95 (fully past limit), bonus loses almost all power.
+            burnout_factor = max(0.1, 1.0 - (overshoot**2))
+
+        effective_bonus = math.log1p(bonus) * fatigue_discount * burnout_factor
 
     base_satisfaction = (agent.motivation * 4.0) + effective_bonus
-    agent.job_satisfaction = max(1.0, min(4.0, base_satisfaction))  # capped at 4.0 to match training range
+    agent.job_satisfaction = max(
+        1.0, min(4.0, base_satisfaction)
+    )  # capped at 4.0 to match training range
 
     # Financial loyalty gain — proportional to raise magnitude.
     # A 25% raise (bonus=2.5) builds loyalty significantly faster than a 5% raise (bonus=0.5).
@@ -178,7 +196,10 @@ def update_agent_state(agent: EmployeeAgent,
     # to reflect that autonomy and schedule control genuinely improve WLB
     # beyond what stress reduction alone achieves.
     perceptible_stress = max(0.0, agent.stress - WLB_STRESS_BUFFER)
-    target_wlb = max(1.0, min(4.0, agent.baseline_wlb + wlb_boost - (perceptible_stress * WLB_STRESS_SENSITIVITY)))
+    target_wlb = max(
+        1.0,
+        min(4.0, agent.baseline_wlb + wlb_boost - (perceptible_stress * WLB_STRESS_SENSITIVITY)),
+    )
     if target_wlb < agent.work_life_balance:
         agent.work_life_balance = max(target_wlb, agent.work_life_balance - WLB_DROP_RATE)
     else:
@@ -198,11 +219,9 @@ def update_agent_state(agent: EmployeeAgent,
         agent.productivity *= burnout_penalty
 
 
-def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
-                               G: OrgGraph,
-                               shock_factor: float):
+def apply_attrition_shockwave(quitting_agent: EmployeeAgent, G: OrgGraph, shock_factor: float):
     """When an agent quits, their neighbors feel the impact."""
-    shockwave_stress  = _c("shockwave_stress_factor", 0.3)
+    shockwave_stress = _c("shockwave_stress_factor", 0.3)
     shockwave_loyalty = _c("shockwave_loyalty_factor", 0.1)
     for neighbor_id in list(G.neighbors(quitting_agent.employee_id)):
         edge_data = G[quitting_agent.employee_id][neighbor_id]
@@ -215,6 +234,6 @@ def apply_attrition_shockwave(quitting_agent: EmployeeAgent,
             # over threshold, creating an unrealistic avalanche in one month.
             raw_stress_hit = shock_factor * weight * shockwave_stress
             neighbour_stress_delta = min(raw_stress_hit, 0.05)
-            neighbor_agent.stress  = min(neighbor_agent.stress + neighbour_stress_delta, 1.0)
+            neighbor_agent.stress = min(neighbor_agent.stress + neighbour_stress_delta, 1.0)
             neighbor_agent.loyalty -= shock_factor * weight * shockwave_loyalty
             neighbor_agent.loyalty = max(neighbor_agent.loyalty, 0.0)

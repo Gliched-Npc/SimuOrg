@@ -1,21 +1,22 @@
 # backend/api/llm_routes.py
 
 import json
-import os
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session
 
 from backend.core.llm.context_builder import build_context
-from backend.core.llm.intent_parser import translate_policy, build_config_from_llm_output
+from backend.core.llm.intent_parser import build_config_from_llm_output, translate_policy
 from backend.db.database import engine
-from backend.db.models import PolicyGenerationLog, OrchestrateJob
-from datetime import datetime, timezone
+from backend.db.models import OrchestrateJob, PolicyGenerationLog
 
 router = APIRouter(prefix="/api/llm", tags=["LLM Services"])
 
 
 # ── Policy Generation ──────────────────────────────────────────────────────────
+
 
 class PolicyRequest(BaseModel):
     description: str
@@ -31,6 +32,7 @@ def generate_policy(request: PolicyRequest):
     try:
         # 1. Load calibration data — strictly from DB (no local fallback)
         from backend.storage.storage import load_artifact
+
         calib_data = load_artifact("calibration") or {}
 
         # 2. Build context out of safe calibration anchors
@@ -40,7 +42,9 @@ def generate_policy(request: PolicyRequest):
         raw_llm_json = translate_policy(request.description, context)
 
         # 4. Build config and clamp according to bounds
-        config, justification = build_config_from_llm_output(raw_llm_json, calib_data, request.description)
+        config, justification = build_config_from_llm_output(
+            raw_llm_json, calib_data, request.description
+        )
 
         # 5. Log to DB — replaces the shared custom_policy.json disk file
         with Session(engine) as session:
@@ -57,17 +61,18 @@ def generate_policy(request: PolicyRequest):
         # 6. Return structured payload for the UI confirmation screen.
         #    log_id must be passed as policy_log_id when calling POST /api/sim/run.
         return {
-            "log_id":               log_id,
-            "config":               config.__dict__,
-            "justification":        justification,
-            "confidence":           calib_data.get("calib_quality", "unknown"),
-            "calib_attrition_std":  calib_data.get("calib_attrition_std", 0.0),
+            "log_id": log_id,
+            "config": config.__dict__,
+            "justification": justification,
+            "confidence": calib_data.get("calib_quality", "unknown"),
+            "calib_attrition_std": calib_data.get("calib_attrition_std", 0.0),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Orchestration (Async via Celery) ──────────────────────────────────────────
+
 
 class OrchestrateRequest(BaseModel):
     user_text: str
@@ -111,8 +116,8 @@ def orchestrate_status(job_id: str):
         raise HTTPException(status_code=404, detail=f"Orchestration job {job_id} not found.")
 
     response = {
-        "job_id":     job.job_id,
-        "status":     job.status,
+        "job_id": job.job_id,
+        "status": job.status,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
     }
@@ -127,6 +132,7 @@ def orchestrate_status(job_id: str):
 
 # ── Policy Config Retrieval ────────────────────────────────────────────────────
 
+
 @router.get("/policy/{log_id}")
 def get_policy_log(log_id: str):
     """Retrieve a previously generated policy config by its log_id."""
@@ -135,15 +141,16 @@ def get_policy_log(log_id: str):
     if log is None:
         raise HTTPException(status_code=404, detail=f"Policy log {log_id} not found.")
     return {
-        "log_id":           log.log_id,
-        "user_prompt":      log.user_prompt,
+        "log_id": log.log_id,
+        "user_prompt": log.user_prompt,
         "generated_config": json.loads(log.generated_config),
-        "justification":    json.loads(log.justification),
-        "created_at":       log.created_at.isoformat(),
+        "justification": json.loads(log.justification),
+        "created_at": log.created_at.isoformat(),
     }
 
 
 # ── CEO Reasoning Chain (standalone, for already-completed sim jobs) ───────────
+
 
 class ExplainRequest(BaseModel):
     job_id: str
@@ -156,8 +163,8 @@ def explain_simulation(request: ExplainRequest):
     and returns a structured CEO executive briefing.
     Result is cached in simulation_job.executive_summary.
     """
-    from backend.db.models import SimulationJob
     from backend.core.llm.reasoning_chain import run_reasoning_chain
+    from backend.db.models import SimulationJob
 
     with Session(engine) as session:
         job = session.get(SimulationJob, request.job_id)
@@ -169,23 +176,23 @@ def explain_simulation(request: ExplainRequest):
         raise HTTPException(
             status_code=400,
             detail=f"Simulation is not complete yet (status: {job.status}). "
-                   "Wait for the job to finish before requesting an explanation."
+            "Wait for the job to finish before requesting an explanation.",
         )
 
     # Return cached summary if already generated (avoid re-calling LLM)
     if job.executive_summary:
         return {
-            "job_id":   request.job_id,
-            "cached":   True,
+            "job_id": request.job_id,
+            "cached": True,
             "briefing": json.loads(job.executive_summary),
         }
 
     if not job.result:
         raise HTTPException(status_code=400, detail="Simulation result data is missing.")
 
-    sim_result    = json.loads(job.result)
+    sim_result = json.loads(job.result)
     policy_config = json.loads(job.policy_config) if job.policy_config else None
-    user_intent   = None
+    user_intent = None
 
     if job.policy_log_id:
         with Session(engine) as session:
@@ -202,12 +209,12 @@ def explain_simulation(request: ExplainRequest):
         job = session.get(SimulationJob, request.job_id)
         if job:
             job.executive_summary = json.dumps(briefing)
-            job.updated_at        = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(timezone.utc)
             session.add(job)
             session.commit()
 
     return {
-        "job_id":   request.job_id,
-        "cached":   False,
+        "job_id": request.job_id,
+        "cached": False,
         "briefing": briefing,
     }

@@ -1,9 +1,9 @@
 # backend/ml/burnout_estimator.py
 
+
 import pandas as pd
-import joblib
-import os
 from sqlmodel import Session, select
+
 from backend.db.database import engine
 from backend.db.models import Employee
 
@@ -33,7 +33,7 @@ def load_data_from_db():
 
 def train_burnout_estimator():
     print("=== Loading data from database...")
-    df = load_data_from_db()
+    load_data_from_db()
 
     print("\n=== Sample Thresholds:")
     print(f"  Junior L1 (1yr)    : {burnout_threshold(1, 1)}")
@@ -45,6 +45,7 @@ def train_burnout_estimator():
     print("[done] Packed for DB")
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact
+
     save_artifact("burnout", burnout_threshold, "pkl")
 
 

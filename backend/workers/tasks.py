@@ -4,25 +4,29 @@
 
 import json
 from datetime import datetime
-from backend.workers.celery_app import celery_app
+
+from sqlmodel import Session
+
+from backend.db.database import engine
+from backend.db.models import OrchestrateJob, SimulationJob
 from backend.services.simulation_service import (
-    run_simulation_job,
     compare_simulation_jobs,
+    run_simulation_job,
     run_training_job,
 )
-from sqlmodel import Session
-from backend.db.database import engine
-from backend.db.models import SimulationJob, OrchestrateJob
+from backend.workers.celery_app import celery_app
 
 
-def _update_job(job_id: str, status: str, result: dict = None, error: str = None, executive_summary: str = None):
+def _update_job(
+    job_id: str, status: str, result: dict = None, error: str = None, executive_summary: str = None
+):
     """Update job status in DB."""
     with Session(engine) as session:
         job = session.get(SimulationJob, job_id)
         if not job:
             raise ValueError(f"Job {job_id} not found in database.")
-            
-        job.status     = status
+
+        job.status = status
         job.updated_at = datetime.utcnow()
         if result:
             job.result = json.dumps(result)
@@ -30,22 +34,32 @@ def _update_job(job_id: str, status: str, result: dict = None, error: str = None
             job.error = error
         if executive_summary:
             job.executive_summary = executive_summary
-        
+
         session.add(job)
         session.commit()
 
 
 @celery_app.task(bind=True, name="tasks.run_simulation")
-def run_simulation_task(self, job_id: str, policy_name: str, runs: int, duration_months: int | None, seed: int = 42, policy_config: dict | None = None):
+def run_simulation_task(
+    self,
+    job_id: str,
+    policy_name: str,
+    runs: int,
+    duration_months: int | None,
+    seed: int = 42,
+    policy_config: dict | None = None,
+):
     _update_job(job_id, "running")
     try:
-        result = run_simulation_job(policy_name, runs, duration_months, seed, policy_config=policy_config)
-        
+        result = run_simulation_job(
+            policy_name, runs, duration_months, seed, policy_config=policy_config
+        )
+
         # ────────────────────────────────────────────────────────────
         # Trigger the CEO Reasoning Chain automatically after math!
         # ────────────────────────────────────────────────────────────
         from backend.core.llm.reasoning_chain import run_reasoning_chain
-        
+
         # Best effort LLM completion
         executive_summary = None
         try:
@@ -57,7 +71,7 @@ def run_simulation_task(self, job_id: str, policy_name: str, runs: int, duration
                 print(f"[LLM worker error] {reasoning_out['error']}")
         except Exception as chain_e:
             print(f"[LLM worker exception] {chain_e}")
-            
+
         _update_job(job_id, "completed", result=result, executive_summary=executive_summary)
         return result
     except Exception as e:
@@ -78,7 +92,15 @@ def run_training_task(self, job_id: str, quality_report: dict = None):
 
 
 @celery_app.task(bind=True, name="tasks.compare_simulations")
-def compare_simulations_task(self, job_id: str, policy_a: str, policy_b: str, runs: int, duration_months: int | None, seed: int = 42):
+def compare_simulations_task(
+    self,
+    job_id: str,
+    policy_a: str,
+    policy_b: str,
+    runs: int,
+    duration_months: int | None,
+    seed: int = 42,
+):
     _update_job(job_id, "running")
     try:
         result = compare_simulation_jobs(policy_a, policy_b, runs, duration_months, seed)
@@ -97,15 +119,16 @@ def orchestrate_task(self, job_id: str, user_text: str):
       Agent 2 — Monte Carlo simulation + reasoning chain
     Writes result to OrchestrateJob so the frontend can poll /orchestrate/status/{job_id}.
     """
-    from backend.services.orchestrator import orchestrate_user_request
     from datetime import datetime
+
+    from backend.services.orchestrator import orchestrate_user_request
 
     def _set(status: str, result: dict = None, error: str = None):
         with Session(engine) as session:
             job = session.get(OrchestrateJob, job_id)
             if not job:
                 return
-            job.status     = status
+            job.status = status
             job.updated_at = datetime.utcnow()
             if result is not None:
                 job.result = json.dumps(result)

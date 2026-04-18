@@ -3,21 +3,21 @@
 import io
 import json
 import uuid
+
 import pandas as pd
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
-from backend.db.database import init_db
-from backend.schema import REQUIRED_COLUMNS, normalize_dataframe
-from backend.upload import ingest_from_dataframe
-from backend.services.report_service import build_upload_report
-from backend.workers.tasks import run_training_task
-from backend.db.models import SimulationJob
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from sqlmodel import Session
-from backend.db.database import engine
- # needed to bust lazy-load cache
+
+from backend.db.database import engine, init_db
+from backend.db.models import SimulationJob
+from backend.schema import REQUIRED_COLUMNS, normalize_dataframe
+from backend.services.report_service import build_upload_report
+from backend.upload import ingest_from_dataframe
+from backend.workers.tasks import run_training_task
+
+# needed to bust lazy-load cache
 
 router = APIRouter(prefix="/api/upload", tags=["Upload"])
-
-
 
 
 def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
@@ -29,12 +29,13 @@ def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
         raise HTTPException(
             status_code=400,
             detail=f"Missing required columns: {missing_required}. "
-                   f"These are the minimum columns needed to run a simulation.",
+            f"These are the minimum columns needed to run a simulation.",
         )
     return df, overtime_was_present
 
 
 # ── Req #17: Pre-ingest validation endpoint ──────────────────────────────────
+
 
 @router.post("/validate")
 async def validate_dataset(file: UploadFile = File(...)):
@@ -64,26 +65,28 @@ async def validate_dataset(file: UploadFile = File(...)):
     junk_removed = report["junk_removed"]
 
     return {
-        "status":          "validated",
-        "rows":            len(df),
+        "status": "validated",
+        "rows": len(df),
         "duplicates_removed": duplicates_removed,
-        "junk_removed":    junk_removed,
-        "schema_report":   schema_report,
-        "trust_score":     quality_report["trust_score"],
-        "issues":          quality_report["issues"],
-        "cleaning_audit":  quality_report["cleaning_audit"],
-        "message":         "Validation complete. Review issues, then POST to /api/upload/dataset to ingest.",
+        "junk_removed": junk_removed,
+        "schema_report": schema_report,
+        "trust_score": quality_report["trust_score"],
+        "issues": quality_report["issues"],
+        "cleaning_audit": quality_report["cleaning_audit"],
+        "message": "Validation complete. Review issues, then POST to /api/upload/dataset to ingest.",
     }
 
 
 # ── Main upload endpoint (unchanged contract, enriched response) ─────────────
 
+
 @router.post("/dataset")
 async def upload_dataset(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
-
     # 1. Validate file
     if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided. Please select a CSV file to upload.")
+        raise HTTPException(
+            status_code=400, detail="No file provided. Please select a CSV file to upload."
+        )
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted.")
 
@@ -111,21 +114,32 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
         result = ingest_from_dataframe(df)
         with Session(engine) as session:
             from sqlalchemy import text
-            session.exec(text("TRUNCATE TABLE simulation_job, orchestrate_job, policy_generation_log CASCADE"))
+
+            session.exec(
+                text(
+                    "TRUNCATE TABLE simulation_job, orchestrate_job, policy_generation_log CASCADE"
+                )
+            )
             session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
     # 4.5 Save dataset metadata
-    from backend.storage.storage import save_artifact
     from datetime import datetime, timezone
-    save_artifact("dataset_metadata", {
-        "filename": file.filename,
-        "rows": result["ingested"],
-        "uploaded_at": datetime.now(timezone.utc).isoformat()
-    }, "json")
 
-    # 5. Kick off training + calibration 
+    from backend.storage.storage import save_artifact
+
+    save_artifact(
+        "dataset_metadata",
+        {
+            "filename": file.filename,
+            "rows": result["ingested"],
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "json",
+    )
+
+    # 5. Kick off training + calibration
     job_id = str(uuid.uuid4())
     with Session(engine) as session:
         job = SimulationJob(
@@ -140,22 +154,25 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     run_training_task.delay(job_id, quality_report)
 
     return {
-        "status":       "ingested",
-        "rows":         result["ingested"],
-        "skipped":      result["skipped"],
-        "job_id":       job_id,
-        "poll_url":     f"/api/upload/status/{job_id}",
-        "message":      "Dataset ingested. Training and calibration running in background. Poll poll_url for status.",
-        "trust_score":    quality_report["trust_score"],
-        "issues":         quality_report["issues"],
+        "status": "ingested",
+        "rows": result["ingested"],
+        "skipped": result["skipped"],
+        "duplicates_removed": duplicates_removed,
+        "junk_removed": junk_removed,
+        "job_id": job_id,
+        "poll_url": f"/api/upload/status/{job_id}",
+        "message": "Dataset ingested. Training and calibration running in background. Poll poll_url for status.",
+        "trust_score": quality_report["trust_score"],
+        "issues": quality_report["issues"],
         "cleaning_audit": quality_report["cleaning_audit"],
-        "schema_report":  schema_report,
+        "schema_report": schema_report,
     }
 
 
 @router.get("/status/{job_id}")
 def get_training_status(job_id: str):
     import json
+
     with Session(engine) as session:
         job = session.get(SimulationJob, job_id)
     if job is None:
@@ -164,15 +181,16 @@ def get_training_status(job_id: str):
     return {
         "job_id": job_id,
         "status": job.status,
-        "error":  job.error,
+        "error": job.error,
         "result": result,
     }
+
 
 @router.get("/metadata")
 def get_dataset_metadata():
     from backend.storage.storage import load_artifact
+
     metadata = load_artifact("dataset_metadata")
     if not metadata:
         raise HTTPException(status_code=404, detail="No dataset uploaded.")
     return metadata
-

@@ -7,38 +7,39 @@ Critical audit bug covered:
 - Fix: dataset_id is now part of the cache key.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import pytest
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
+
 
 def _make_agent(employee_id, department="Engineering", job_level=2, manager_id=None):
     """Build a minimal MagicMock that satisfies OrgGraph._build_graph()."""
     emp = MagicMock()
-    emp.employee_id              = employee_id
-    emp.department               = department
-    emp.job_level                = job_level
-    emp.manager_id               = manager_id
-    emp.years_with_curr_manager  = 2
-    emp.job_satisfaction         = 3.0
-    emp.work_life_balance        = 3.0
-    emp.total_working_years      = 5
-    emp.years_at_company         = 3
-    emp.monthly_income           = 5000
-    emp.attrition                = "No"
-    emp.job_role                 = "Engineer"
-    emp.performance_rating       = 3
-    emp.stock_option_level       = 1
-    emp.age                      = 30
-    emp.distance_from_home       = 10
-    emp.percent_salary_hike      = 10
+    emp.employee_id = employee_id
+    emp.department = department
+    emp.job_level = job_level
+    emp.manager_id = manager_id
+    emp.years_with_curr_manager = 2
+    emp.job_satisfaction = 3.0
+    emp.work_life_balance = 3.0
+    emp.total_working_years = 5
+    emp.years_at_company = 3
+    emp.monthly_income = 5000
+    emp.attrition = "No"
+    emp.job_role = "Engineer"
+    emp.performance_rating = 3
+    emp.stock_option_level = 1
+    emp.age = 30
+    emp.distance_from_home = 10
+    emp.percent_salary_hike = 10
     emp.years_since_last_promotion = 1
-    emp.job_involvement          = 3
+    emp.job_involvement = 3
     emp.environment_satisfaction = 3
-    emp.num_companies_worked     = 2
-    emp.marital_status           = "Single"
-    emp.overtime                 = 0
+    emp.num_companies_worked = 2
+    emp.marital_status = "Single"
+    emp.overtime = 0
     return emp
 
 
@@ -48,16 +49,19 @@ def _make_agents(n, department="Engineering"):
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def clear_cache():
     """Always start each test with a clean graph cache."""
     from backend.core.simulation.org_graph import clear_graph_cache
+
     clear_graph_cache()
     yield
     clear_graph_cache()
 
 
 # ── Cache isolation tests ──────────────────────────────────────────────────────
+
 
 class TestCacheIsolation:
     """
@@ -84,8 +88,8 @@ class TestCacheIsolation:
 
     def test_same_dataset_id_reuses_template(self):
         """Caching must still work for repeated calls with same dataset_id."""
-        from backend.core.simulation.org_graph import build_org_graph, _cached_template_graph
         import backend.core.simulation.org_graph as og_module
+        from backend.core.simulation.org_graph import build_org_graph
 
         agents = _make_agents(15)
 
@@ -101,8 +105,8 @@ class TestCacheIsolation:
 
     def test_cache_invalidated_on_different_dataset_id(self):
         """Switching dataset_id must rebuild and update the cache."""
-        from backend.core.simulation.org_graph import build_org_graph
         import backend.core.simulation.org_graph as og_module
+        from backend.core.simulation.org_graph import build_org_graph
 
         agents = _make_agents(10)
 
@@ -117,8 +121,8 @@ class TestCacheIsolation:
 
     def test_clear_graph_cache_resets_all_state(self):
         """clear_graph_cache() must zero out all three module-level globals."""
-        from backend.core.simulation.org_graph import build_org_graph, clear_graph_cache
         import backend.core.simulation.org_graph as og_module
+        from backend.core.simulation.org_graph import build_org_graph, clear_graph_cache
 
         build_org_graph(_make_agents(10), dataset_id="test")
         assert og_module._cached_template_graph is not None
@@ -126,32 +130,32 @@ class TestCacheIsolation:
         clear_graph_cache()
 
         assert og_module._cached_template_graph is None
-        assert og_module._cached_agents_count   == 0
-        assert og_module._cached_dataset_id     is None
+        assert og_module._cached_agents_count == 0
+        assert og_module._cached_dataset_id is None
 
 
 # ── Graph structure correctness ────────────────────────────────────────────────
 
-class TestGraphStructure:
 
+class TestGraphStructure:
     def test_all_agents_become_nodes(self):
         from backend.core.simulation.org_graph import build_org_graph
 
         agents = _make_agents(10)
-        graph  = build_org_graph(agents, dataset_id="test")
+        graph = build_org_graph(agents, dataset_id="test")
 
         for agent in agents:
-            assert graph.has_node(agent.employee_id), (
-                f"Agent {agent.employee_id} missing from graph nodes"
-            )
+            assert graph.has_node(
+                agent.employee_id
+            ), f"Agent {agent.employee_id} missing from graph nodes"
 
     def test_manager_edges_created(self):
         """Employees with manager_id set must have a manager-type edge."""
         from backend.core.simulation.org_graph import build_org_graph
 
         manager = _make_agent(1)
-        report  = _make_agent(2, manager_id=1)
-        graph   = build_org_graph([manager, report], dataset_id="test")
+        report = _make_agent(2, manager_id=1)
+        graph = build_org_graph([manager, report], dataset_id="test")
 
         assert graph.has_edge(1, 2) or graph.has_edge(2, 1)
         # Confirm edge type
@@ -163,15 +167,15 @@ class TestGraphStructure:
         from backend.core.simulation.org_graph import build_org_graph
 
         agents = _make_agents(10)
-        graph  = build_org_graph(agents, dataset_id="test")
+        graph = build_org_graph(agents, dataset_id="test")
 
         for agent in agents:
             assert not graph.has_edge(agent.employee_id, agent.employee_id)
 
     def test_copy_does_not_mutate_template(self):
         """OrgGraph copies must not mutate the cached template."""
-        from backend.core.simulation.org_graph import build_org_graph
         import backend.core.simulation.org_graph as og_module
+        from backend.core.simulation.org_graph import build_org_graph
 
         agents = _make_agents(10)
         build_org_graph(agents, dataset_id="test")
@@ -189,15 +193,15 @@ class TestGraphStructure:
 
 # ── OrgGraph traversal methods ─────────────────────────────────────────────────
 
-class TestOrgGraphTraversal:
 
+class TestOrgGraphTraversal:
     def test_get_direct_reports_returns_correct_agents(self):
-        from backend.core.simulation.org_graph import OrgGraph, build_org_graph
+        from backend.core.simulation.org_graph import build_org_graph
 
         manager = _make_agent(1)
-        r1      = _make_agent(2, manager_id=1)
-        r2      = _make_agent(3, manager_id=1)
-        graph   = build_org_graph([manager, r1, r2], dataset_id="test")
+        r1 = _make_agent(2, manager_id=1)
+        r2 = _make_agent(3, manager_id=1)
+        graph = build_org_graph([manager, r1, r2], dataset_id="test")
 
         # Must import EmployeeAgent since build_org_graph wraps mock agents
         reports = graph.get_direct_reports(1)
@@ -222,6 +226,7 @@ class TestOrgGraphTraversal:
         b = _make_agent(2, manager_id=1)
 
         from backend.core.simulation.org_graph import build_org_graph
+
         graph = build_org_graph([a, b], dataset_id="test")
 
         # Must terminate — visited set prevents infinite loop

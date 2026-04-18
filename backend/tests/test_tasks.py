@@ -8,12 +8,13 @@ Audit bugs covered:
   each call must use its own session, not leak across calls
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, call
 import json
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def mock_db_session():
@@ -31,15 +32,16 @@ def mock_db_session():
 @pytest.fixture
 def mock_job(mock_db_session):
     """Pre-configure a mock SimulationJob that IS found in the DB."""
-    mock_job_instance              = MagicMock()
-    mock_job_instance.status       = "pending"
-    mock_job_instance.result       = None
-    mock_job_instance.error        = None
+    mock_job_instance = MagicMock()
+    mock_job_instance.status = "pending"
+    mock_job_instance.result = None
+    mock_job_instance.error = None
     mock_db_session.get.return_value = mock_job_instance
     return mock_job_instance
 
 
 # ── _update_job internals ──────────────────────────────────────────────────────
+
 
 class TestUpdateJob:
     """
@@ -91,6 +93,7 @@ class TestUpdateJob:
         mock_job.result = '{"previous": "data"}'
 
         from backend.workers.tasks import _update_job
+
         _update_job("job_id", "running")  # no result kwarg
 
         # result should not be touched
@@ -99,8 +102,8 @@ class TestUpdateJob:
 
 # ── run_simulation_task ────────────────────────────────────────────────────────
 
-class TestRunSimulationTask:
 
+class TestRunSimulationTask:
     def test_task_calls_service_and_marks_completed(self, mock_db_session, mock_job):
         fake_result = {"summary": {"total_quits": 3}}
 
@@ -121,8 +124,9 @@ class TestRunSimulationTask:
         assert result.status == "SUCCESS"
 
     def test_task_marks_failed_on_exception(self, mock_db_session, mock_job):
-        with patch("backend.workers.tasks.run_simulation_job",
-                   side_effect=RuntimeError("sim crashed")):
+        with patch(
+            "backend.workers.tasks.run_simulation_job", side_effect=RuntimeError("sim crashed")
+        ):
             from backend.workers.tasks import run_simulation_task
 
             result = run_simulation_task.apply(
@@ -158,36 +162,31 @@ class TestRunSimulationTask:
 
 # ── run_training_task ──────────────────────────────────────────────────────────
 
-class TestRunTrainingTask:
 
+class TestRunTrainingTask:
     def test_training_task_completes(self, mock_db_session, mock_job):
         fake_result = {"accuracy": 0.91}
 
         with patch("backend.workers.tasks.run_training_job", return_value=fake_result):
             from backend.workers.tasks import run_training_task
 
-            result = run_training_task.apply(
-                kwargs=dict(job_id="train_1", quality_report=None)
-            )
+            result = run_training_task.apply(kwargs=dict(job_id="train_1", quality_report=None))
 
         assert result.status == "SUCCESS"
 
     def test_training_task_fails_cleanly(self, mock_db_session, mock_job):
-        with patch("backend.workers.tasks.run_training_job",
-                   side_effect=ValueError("bad data")):
+        with patch("backend.workers.tasks.run_training_job", side_effect=ValueError("bad data")):
             from backend.workers.tasks import run_training_task
 
-            result = run_training_task.apply(
-                kwargs=dict(job_id="train_1", quality_report=None)
-            )
+            result = run_training_task.apply(kwargs=dict(job_id="train_1", quality_report=None))
 
         assert result.status == "FAILURE"
 
 
 # ── compare_simulations_task ───────────────────────────────────────────────────
 
-class TestCompareSimulationsTask:
 
+class TestCompareSimulationsTask:
     def test_comparison_completes(self, mock_db_session, mock_job):
         fake_result = {"delta_attrition": -0.05}
 
@@ -213,8 +212,9 @@ class TestCompareSimulationsTask:
         Both policies got identical RNG sequences, making comparisons meaningless.
         Verify the service is called with the seed so it can differentiate internally.
         """
-        with patch("backend.workers.tasks.compare_simulation_jobs",
-                   return_value={}) as mock_compare:
+        with patch(
+            "backend.workers.tasks.compare_simulation_jobs", return_value={}
+        ) as mock_compare:
             from backend.workers.tasks import compare_simulations_task
 
             compare_simulations_task.apply(

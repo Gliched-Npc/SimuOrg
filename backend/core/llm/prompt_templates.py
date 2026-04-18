@@ -15,6 +15,9 @@ The parameters you must output are:
 - `wlb_boost`                        (Direct float)
 - `salary_increase_pct`              (Raw percentage float — EXACT number user stated, e.g. 12.0 for "12% salary raise". Use 0.0 if no salary change.)
 - `overtime_reduction_pct`           (Raw percentage float — EXACT number user stated, e.g. 20.0 for "reduce overtime by 20%". Use 0.0 if no overtime reduction mentioned.)
+- `intent_mentions_layoff`           (boolean — TRUE if user mentions reducing headcount, firing, or downsizing. Otherwise FALSE.)
+- `intent_mentions_hiring_freeze`    (boolean — TRUE if user mentions freezing, stopping, or pausing hiring. Otherwise FALSE.)
+- `intent_mentions_wlb_penalty`      (boolean — TRUE if user forces RTO, mandatory overtime, or relocation. Otherwise FALSE.)
 
 IMPORTANT: Do NOT output `salary_multiplier` — it is not a valid field.
 IMPORTANT: `stress_gain_rate_multiplier` and `motivation_decay_rate_multiplier` are RATIOS.
@@ -171,7 +174,7 @@ CRITICAL INSTRUCTIONS & EXTREME LOGIC REASONING:
 1. Return ONLY clean, strictly formatted JSON. No markdown (no ```json or ```). No text outside the JSON.
 2. NEVER output `salary_multiplier` — it does not exist in the system.
 3. `stress_gain_rate_multiplier` and `motivation_decay_rate_multiplier` are RATIOS (multipliers). Do not use absolute engine decimals.
-4. EXTREME BURNOUT LOGIC: 
+4. EXTREME BURNOUT LOGIC:
    - If workload DECREASES (`workload_multiplier` < 1.0), `stress_gain_rate_multiplier` MUST logically DECREASE (< 1.0). Working less lowers stress.
    - If workload INCREASES (`workload_multiplier` > 1.2), `motivation_decay_rate_multiplier` MUST INCREASE (e.g., > 1.2). Overwork kills motivation.
    - For pure salary increases without workload increases, motivation_decay_rate_multiplier MUST DECREASE (< 1.0). Money stabilizes morale.
@@ -185,6 +188,10 @@ CRITICAL INSTRUCTIONS & EXTREME LOGIC REASONING:
 
 9. POSITIVE GROWTH: If the policy is a positive growth phase (e.g. hiring, expanding, adding resources), `shock_factor` MUST BE 0.0 so people don't panic.
 10. BONUS MAPPING: `bonus` handles all financial compensation (spot bonuses, raises, overtime pay). Map any financial addition to a positive `bonus` multiplier.
+11. DURATION RULES:
+   - `duration_months` defaults to 12 UNLESS the user explicitly states a number of months (e.g. "simulate for 6 months" → 6).
+   - Words like "immediately", "right now", "ASAP", "urgently" mean the policy TAKES EFFECT in month 1. They do NOT mean the simulation duration is 1 month. Always keep duration_months at 12 for these.
+   - Only reduce duration_months below 12 if the user explicitly says a number like "3 months" or "next quarter".
 
 --- DYNAMIC RELEVANT EXAMPLES ---
 """

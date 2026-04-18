@@ -1,7 +1,8 @@
 # backend/services/cleaning_report.py
 
-from backend.upload import clean_dataframe
 import pandas as pd
+
+from backend.upload import clean_dataframe
 
 
 def generate_cleaning_report(df: pd.DataFrame) -> tuple[pd.DataFrame, int, int, dict, list[str]]:

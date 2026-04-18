@@ -1,15 +1,17 @@
 # backend/simulation/monte_carlo.py
 
 import copy
-import json
-import os
+
 import numpy as np
-from backend.core.simulation.time_engine import run_simulation, load_agents_from_db
+
 from backend.core.simulation.org_graph import build_org_graph
 from backend.core.simulation.policies import SimulationConfig
+from backend.core.simulation.time_engine import load_agents_from_db, run_simulation
 
 
-def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str = "custom", seed: int = 42) -> dict:
+def run_monte_carlo(
+    config: SimulationConfig, runs: int = 50, policy_name: str = "custom", seed: int = 42
+) -> dict:
     """
     Run simulation multiple times and aggregate results.
     Returns mean, min, max, std for each metric across all runs.
@@ -25,13 +27,13 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
     # every single run. Building once and copying the graph object is ~50x faster.
     base_G = build_org_graph(base_agents)
 
-    all_logs      = []
+    all_logs = []
     all_summaries = []
 
     for i in range(runs):
         print(f"   Run {i+1}/{runs}...", end="\r")
         agents_copy = copy.deepcopy(base_agents)
-        G_copy      = copy.deepcopy(base_G)
+        G_copy = copy.deepcopy(base_G)
 
         # Re-wire graph node agent references to the copied agents so the
         # behavior engine reads the copied state, not the base state.
@@ -40,15 +42,16 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             if node_id in id_to_copy:
                 G_copy.nodes[node_id]["agent"] = id_to_copy[node_id]
 
-        result = run_simulation(config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=seed + i)
+        result = run_simulation(
+            config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=seed + i
+        )
         all_logs.append(result["logs"])
         all_summaries.append(result.get("summary", {}))
 
-    print(f"\n[done] Monte Carlo complete.")
-
+    print("\n[done] Monte Carlo complete.")
 
     # Aggregate across runs for each month
-    duration   = len(all_logs[0]) if all_logs else 0
+    duration = len(all_logs[0]) if all_logs else 0
     aggregated = []
 
     for month_idx in range(duration):
@@ -58,61 +61,79 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             values = [m[key] for m in month_data]
             return {
                 "mean": round(float(np.mean(values)), 4),
-                "min":  round(float(np.min(values)),  4),
-                "max":  round(float(np.max(values)),  4),
-                "std":  round(float(np.std(values)),  4),
+                "min": round(float(np.min(values)), 4),
+                "max": round(float(np.max(values)), 4),
+                "std": round(float(np.std(values)), 4),
             }
 
-        aggregated.append({
-            "month"                : month_idx + 1,
-            "headcount"            : stat("headcount"),
-            "attrition_count"      : stat("attrition_count"),
-            "layoff_count"         : stat("layoff_count"),
-            "avg_stress"           : stat("avg_stress"),
-            "avg_productivity"     : stat("avg_productivity"),
-            "avg_motivation"       : stat("avg_motivation"),
-            "burnout_count"        : stat("burnout_count"),
-            "avg_job_satisfaction" : stat("avg_job_satisfaction"),
-            "avg_work_life_balance": stat("avg_work_life_balance"),
-            "avg_loyalty"          : stat("avg_loyalty"),
-        })
+        aggregated.append(
+            {
+                "month": month_idx + 1,
+                "headcount": stat("headcount"),
+                "attrition_count": stat("attrition_count"),
+                "layoff_count": stat("layoff_count"),
+                "avg_stress": stat("avg_stress"),
+                "avg_productivity": stat("avg_productivity"),
+                "avg_motivation": stat("avg_motivation"),
+                "burnout_count": stat("burnout_count"),
+                "avg_job_satisfaction": stat("avg_job_satisfaction"),
+                "avg_work_life_balance": stat("avg_work_life_balance"),
+                "avg_loyalty": stat("avg_loyalty"),
+            }
+        )
 
     # --- Executive / domain-level summary ---
     if aggregated:
-        valid_summaries   = [s for s in all_summaries if "initial_headcount" in s]
-        initial_headcount = float(np.mean([s["initial_headcount"] for s in valid_summaries])) if valid_summaries else aggregated[0]["headcount"]["mean"]
-        final_headcount   = aggregated[-1]["headcount"]["mean"]
+        valid_summaries = [s for s in all_summaries if "initial_headcount" in s]
+        initial_headcount = (
+            float(np.mean([s["initial_headcount"] for s in valid_summaries]))
+            if valid_summaries
+            else aggregated[0]["headcount"]["mean"]
+        )
+        final_headcount = aggregated[-1]["headcount"]["mean"]
 
         # Correct attrition formula:
         # Each run's summary["total_quits"] is the ground truth — it's the raw
         # cumulative count returned by time_engine, not a mean of monthly slices.
         # Averaging those per-run totals removes the double-counting bias from
         # summing monthly mean attrition_counts (which compounds rounding error).
-        valid_summaries   = [s for s in all_summaries if "total_quits" in s]
+        valid_summaries = [s for s in all_summaries if "total_quits" in s]
         if valid_summaries:
-            total_quits_est   = float(np.mean([s["total_quits"] for s in valid_summaries]))
-            avg_headcount_est = float(np.mean([
-                (s["initial_headcount"] + s["final_headcount"]) / 2.0
-                for s in valid_summaries
-                if "initial_headcount" in s and "final_headcount" in s
-            ])) if all("initial_headcount" in s for s in valid_summaries) else initial_headcount
+            total_quits_est = float(np.mean([s["total_quits"] for s in valid_summaries]))
+            avg_headcount_est = (
+                float(
+                    np.mean(
+                        [
+                            (s["initial_headcount"] + s["final_headcount"]) / 2.0
+                            for s in valid_summaries
+                            if "initial_headcount" in s and "final_headcount" in s
+                        ]
+                    )
+                )
+                if all("initial_headcount" in s for s in valid_summaries)
+                else initial_headcount
+            )
         else:
             # Fallback: sum of monthly means (old method — less accurate)
-            total_quits_est   = sum(m["attrition_count"]["mean"] for m in aggregated)
+            total_quits_est = sum(m["attrition_count"]["mean"] for m in aggregated)
             avg_headcount_est = initial_headcount
 
         period_months = config.duration_months
-        denom         = avg_headcount_est if avg_headcount_est > 0 else initial_headcount
+        denom = avg_headcount_est if avg_headcount_est > 0 else initial_headcount
         if denom > 0:
             period_attrition_pct = total_quits_est / denom * 100.0
-            annual_attrition_pct = period_attrition_pct * (12.0 / period_months) if period_months > 0 else period_attrition_pct
+            annual_attrition_pct = (
+                period_attrition_pct * (12.0 / period_months)
+                if period_months > 0
+                else period_attrition_pct
+            )
         else:
-
             period_attrition_pct = 0.0
             annual_attrition_pct = 0.0
 
         # Load calibration, if available, to anchor realism check.
         from backend.storage.storage import load_artifact
+
         baseline_annual_attrition = None
         cal = load_artifact("calibration")
         if cal:
@@ -128,9 +149,9 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
 
         # Short narrative for CEOs/Directors
         start = aggregated[0]
-        end   = aggregated[-1]
+        end = aggregated[-1]
         delta_stress = end["avg_stress"]["mean"] - start["avg_stress"]["mean"]
-        delta_wlb    = end["avg_work_life_balance"]["mean"] - start["avg_work_life_balance"]["mean"]
+        delta_wlb = end["avg_work_life_balance"]["mean"] - start["avg_work_life_balance"]["mean"]
         delta_jobsat = end["avg_job_satisfaction"]["mean"] - start["avg_job_satisfaction"]["mean"]
 
         narrative = (
@@ -152,7 +173,9 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
             "period_attrition_pct": round(float(period_attrition_pct), 2),
             "annual_attrition_pct": round(float(annual_attrition_pct), 2),
             "realism_flag": realism_flag,
-            "baseline_annual_attrition_pct": round(float(baseline_annual_attrition), 2) if baseline_annual_attrition is not None else None,
+            "baseline_annual_attrition_pct": round(float(baseline_annual_attrition), 2)
+            if baseline_annual_attrition is not None
+            else None,
             "narrative": narrative,
         }
     else:
@@ -169,8 +192,8 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
         }
 
     return {
-        "config" : config.__dict__,
-        "runs"   : runs,
+        "config": config.__dict__,
+        "runs": runs,
         "results": aggregated,
         "summary": executive_summary,
     }
@@ -179,7 +202,7 @@ def run_monte_carlo(config: SimulationConfig, runs: int = 50, policy_name: str =
 if __name__ == "__main__":
     from backend.core.simulation.policies import get_policy
 
-    config  = get_policy("baseline")
+    config = get_policy("baseline")
     results = run_monte_carlo(config, runs=10)
 
     print("\n=== Month 12 Summary (across 10 runs):")

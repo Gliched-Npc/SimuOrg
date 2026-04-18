@@ -18,10 +18,11 @@
 import json
 import os
 from datetime import datetime, timezone
+
 from openai import OpenAI
 
-
 # ── Analytics Engine (pure Python, no LLM) ────────────────────────────────────
+
 
 def _safe_mean(month: dict, key: str) -> float | None:
     """Extract mean from a metric dict safely."""
@@ -38,16 +39,24 @@ def _trend_verdict(pct_change: float, lower_is_better: bool = False) -> str:
     than small deteriorations for executive risk framing.
     """
     if lower_is_better:
-        if pct_change < -8:   return "improving"
-        if pct_change < -3:   return "slightly improving"
-        if pct_change <=  3:  return "stable"
-        if pct_change <=  10: return "slightly deteriorating"
+        if pct_change < -8:
+            return "improving"
+        if pct_change < -3:
+            return "slightly improving"
+        if pct_change <= 3:
+            return "stable"
+        if pct_change <= 10:
+            return "slightly deteriorating"
         return "deteriorating"
     else:
-        if pct_change > 3:    return "improving"
-        if pct_change > 1:    return "slightly improving"
-        if pct_change >= -1:  return "stable"
-        if pct_change >= -5:  return "slightly deteriorating"
+        if pct_change > 3:
+            return "improving"
+        if pct_change > 1:
+            return "slightly improving"
+        if pct_change >= -1:
+            return "stable"
+        if pct_change >= -5:
+            return "slightly deteriorating"
         return "deteriorating"
 
 
@@ -81,29 +90,29 @@ def _classify_scenario(config: dict, results: list) -> dict:
       - These flags prevent the LLM from applying the wrong mental model
         to a scenario it hasn't fully understood.
     """
-    layoff_ratio    = config.get("layoff_ratio", 0) or 0
-    workload        = config.get("workload_multiplier", 1.0) or 1.0
-    hiring          = config.get("hiring_active", True)
-    shock           = config.get("shock_factor", 0) or 0
-    wlb             = config.get("wlb_boost", 0) or 0
-    overtime        = config.get("bonus", 0) or 0
+    layoff_ratio = config.get("layoff_ratio", 0) or 0
+    workload = config.get("workload_multiplier", 1.0) or 1.0
+    hiring = config.get("hiring_active", True)
+    shock = config.get("shock_factor", 0) or 0
+    wlb = config.get("wlb_boost", 0) or 0
+    overtime = config.get("bonus", 0) or 0
 
     # Compute total layoffs from data (more reliable than config alone)
     total_layoffs = sum((_safe_mean(r, "layoff_count") or 0) for r in results)
-    peak_monthly_layoffs = max(
-        (_safe_mean(r, "layoff_count") or 0) for r in results
-    ) if results else 0
+    peak_monthly_layoffs = (
+        max((_safe_mean(r, "layoff_count") or 0) for r in results) if results else 0
+    )
 
     # ── Scenario type flags ────────────────────────────────────────────────────
-    is_layoff_scenario      = layoff_ratio > 0 or total_layoffs > 0
-    is_hiring_freeze        = not hiring and layoff_ratio == 0
-    is_workload_reduction   = workload < 0.95
-    is_workload_increase    = workload > 1.1
-    is_extreme_crunch       = workload >= 1.4
-    is_positive_policy      = workload <= 1.0 and wlb > 0 and layoff_ratio == 0
+    is_layoff_scenario = layoff_ratio > 0 or total_layoffs > 0
+    is_hiring_freeze = not hiring and layoff_ratio == 0
+    is_workload_reduction = workload < 0.95
+    is_workload_increase = workload > 1.1
+    is_extreme_crunch = workload >= 1.4
+    is_positive_policy = workload <= 1.0 and wlb > 0 and layoff_ratio == 0
     is_compensation_focused = overtime > 0 and workload <= 1.1
-    is_restructure          = shock > 0.3 and layoff_ratio == 0
-    is_growth_phase         = hiring and workload >= 1.1 and layoff_ratio == 0
+    is_restructure = shock > 0.3 and layoff_ratio == 0
+    is_growth_phase = hiring and workload >= 1.1 and layoff_ratio == 0
 
     # ── Layoff suppression warning ─────────────────────────────────────────────
     # When layoffs happen, voluntary attrition drops artificially.
@@ -115,40 +124,49 @@ def _classify_scenario(config: dict, results: list) -> dict:
     # Convert config floats to plain English for the LLM
     workload_meaning = (
         f"workload REDUCED by {round((1 - workload) * 100)}% — employees have less work"
-        if workload < 0.95 else
-        f"workload INCREASED by {round((workload - 1) * 100)}% — employees have more work"
-        if workload > 1.05 else
-        "workload unchanged (baseline)"
+        if workload < 0.95
+        else f"workload INCREASED by {round((workload - 1) * 100)}% — employees have more work"
+        if workload > 1.05
+        else "workload unchanged (baseline)"
     )
 
     scenario_type = (
-        "LAYOFF"           if is_layoff_scenario else
-        "HIRING_FREEZE"    if is_hiring_freeze else
-        "WORKLOAD_REDUCTION" if is_workload_reduction else
-        "EXTREME_CRUNCH"   if is_extreme_crunch else
-        "WORKLOAD_INCREASE" if is_workload_increase else
-        "POSITIVE_POLICY"  if is_positive_policy else
-        "COMPENSATION"     if is_compensation_focused else
-        "RESTRUCTURE"      if is_restructure else
-        "GROWTH"           if is_growth_phase else
-        "GENERAL"
+        "LAYOFF"
+        if is_layoff_scenario
+        else "HIRING_FREEZE"
+        if is_hiring_freeze
+        else "WORKLOAD_REDUCTION"
+        if is_workload_reduction
+        else "EXTREME_CRUNCH"
+        if is_extreme_crunch
+        else "WORKLOAD_INCREASE"
+        if is_workload_increase
+        else "POSITIVE_POLICY"
+        if is_positive_policy
+        else "COMPENSATION"
+        if is_compensation_focused
+        else "RESTRUCTURE"
+        if is_restructure
+        else "GROWTH"
+        if is_growth_phase
+        else "GENERAL"
     )
 
     return {
-        "scenario_type":             scenario_type,
-        "is_layoff_scenario":        is_layoff_scenario,
-        "is_hiring_freeze":          is_hiring_freeze,
-        "is_workload_reduction":     is_workload_reduction,
-        "is_workload_increase":      is_workload_increase,
-        "is_extreme_crunch":         is_extreme_crunch,
-        "is_positive_policy":        is_positive_policy,
-        "is_compensation_focused":   is_compensation_focused,
-        "is_restructure":            is_restructure,
-        "is_growth_phase":           is_growth_phase,
+        "scenario_type": scenario_type,
+        "is_layoff_scenario": is_layoff_scenario,
+        "is_hiring_freeze": is_hiring_freeze,
+        "is_workload_reduction": is_workload_reduction,
+        "is_workload_increase": is_workload_increase,
+        "is_extreme_crunch": is_extreme_crunch,
+        "is_positive_policy": is_positive_policy,
+        "is_compensation_focused": is_compensation_focused,
+        "is_restructure": is_restructure,
+        "is_growth_phase": is_growth_phase,
         "layoff_suppression_active": layoff_suppression_active,
-        "total_layoffs":             round(total_layoffs, 1),
-        "peak_monthly_layoffs":      round(peak_monthly_layoffs, 1),
-        "workload_meaning":          workload_meaning,
+        "total_layoffs": round(total_layoffs, 1),
+        "peak_monthly_layoffs": round(peak_monthly_layoffs, 1),
+        "workload_meaning": workload_meaning,
     }
 
 
@@ -167,25 +185,25 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
       - Overall: composite health score, dominant risk driver
       - Baseline comparison: vs historical attrition
     """
-    results  = sim_result.get("results", [])
-    summary  = sim_result.get("summary", {})
-    config   = policy_config or sim_result.get("config", {})
+    results = sim_result.get("results", [])
+    summary = sim_result.get("summary", {})
+    config = policy_config or sim_result.get("config", {})
 
     if not results:
         return {"error": "No monthly results available"}
 
     start = results[0]
-    end   = results[-1]
-    n     = len(results)
-    mid   = results[n // 2]
+    end = results[-1]
+    n = len(results)
+    mid = results[n // 2]
 
     # ── Step 0: Classify scenario FIRST — conditions all downstream logic ──────
     scenario = _classify_scenario(config, results)
 
     def metric_block(key: str, label: str, lower_is_better: bool = False) -> dict:
         s = _safe_mean(start, key)
-        e = _safe_mean(end,   key)
-        m = _safe_mean(mid,   key)
+        e = _safe_mean(end, key)
+        m = _safe_mean(mid, key)
         if s is None or e is None:
             return {"label": label, "available": False}
         pct = _pct_change(s, e)
@@ -212,26 +230,28 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
                 shape = "improving" if pct > 0 else "worsening"
 
         return {
-            "label":         label,
-            "available":     True,
-            "start":         round(s, 4),
-            "mid":           round(mid_val, 4),
-            "end":           round(e, 4),
-            "abs_delta":     round(e - s, 4),
-            "pct_change":    round(pct, 1),
-            "verdict":       _trend_verdict(pct, lower_is_better),
-            "shape":         shape,
+            "label": label,
+            "available": True,
+            "start": round(s, 4),
+            "mid": round(mid_val, 4),
+            "end": round(e, 4),
+            "abs_delta": round(e - s, 4),
+            "pct_change": round(pct, 1),
+            "verdict": _trend_verdict(pct, lower_is_better),
+            "shape": shape,
             "lower_is_better": lower_is_better,
         }
 
     # ── Per-metric trajectory ──────────────────────────────────────────────────
 
     metrics = {
-        "stress":       metric_block("avg_stress",           "Stress",            lower_is_better=True),
-        "productivity": metric_block("avg_productivity",     "Productivity",      lower_is_better=False),
-        "motivation":   metric_block("avg_motivation",       "Motivation",        lower_is_better=False),
-        "satisfaction": metric_block("avg_job_satisfaction", "Job Satisfaction",  lower_is_better=False),
-        "wlb":          metric_block("avg_work_life_balance","Work-Life Balance", lower_is_better=False),
+        "stress": metric_block("avg_stress", "Stress", lower_is_better=True),
+        "productivity": metric_block("avg_productivity", "Productivity", lower_is_better=False),
+        "motivation": metric_block("avg_motivation", "Motivation", lower_is_better=False),
+        "satisfaction": metric_block(
+            "avg_job_satisfaction", "Job Satisfaction", lower_is_better=False
+        ),
+        "wlb": metric_block("avg_work_life_balance", "Work-Life Balance", lower_is_better=False),
         # NOTE: loyalty is computed by the simulation engine but excluded from
         # executive-facing analytics. The model's loyalty decay does not
         # accurately reflect real-world dynamics for flexibility/WLB policies.
@@ -241,32 +261,37 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
 
     monthly_attr_rates = []
     for r in results:
-        hc  = _safe_mean(r, "headcount")
+        hc = _safe_mean(r, "headcount")
         att = _safe_mean(r, "attrition_count")
         if hc and att and hc > 0:
-            monthly_attr_rates.append({
-                "month": r["month"],
-                "rate_pct": round((att / hc) * 100, 3),
-                "count": round(att, 1),
-            })
+            monthly_attr_rates.append(
+                {
+                    "month": r["month"],
+                    "rate_pct": round((att / hc) * 100, 3),
+                    "count": round(att, 1),
+                }
+            )
 
     peak_attr = max(monthly_attr_rates, key=lambda x: x["rate_pct"]) if monthly_attr_rates else {}
     avg_monthly_attr = (
         sum(x["rate_pct"] for x in monthly_attr_rates) / len(monthly_attr_rates)
-        if monthly_attr_rates else 0
+        if monthly_attr_rates
+        else 0
     )
 
     # Acceleration: is attrition getting worse over time?
     if len(monthly_attr_rates) >= 4:
-        first_half  = monthly_attr_rates[:n // 2]
-        second_half = monthly_attr_rates[n // 2:]
-        avg_first   = sum(x["rate_pct"] for x in first_half)  / len(first_half)
-        avg_second  = sum(x["rate_pct"] for x in second_half) / len(second_half)
+        first_half = monthly_attr_rates[: n // 2]
+        second_half = monthly_attr_rates[n // 2 :]
+        avg_first = sum(x["rate_pct"] for x in first_half) / len(first_half)
+        avg_second = sum(x["rate_pct"] for x in second_half) / len(second_half)
         attr_acceleration = round(avg_second - avg_first, 3)
         attr_trend = (
-            "accelerating"   if attr_acceleration >  0.1 else
-            "decelerating"   if attr_acceleration < -0.1 else
-            "stable"
+            "accelerating"
+            if attr_acceleration > 0.1
+            else "decelerating"
+            if attr_acceleration < -0.1
+            else "stable"
         )
     else:
         attr_acceleration = 0.0
@@ -274,19 +299,23 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
 
     # ── Stress shape analysis ──────────────────────────────────────────────────
 
-    stress_vals  = [(_safe_mean(r, "avg_stress") or 0) for r in results]
-    peak_stress  = max(stress_vals)
+    stress_vals = [(_safe_mean(r, "avg_stress") or 0) for r in results]
+    peak_stress = max(stress_vals)
     peak_stress_month = results[stress_vals.index(peak_stress)]["month"]
     final_stress = stress_vals[-1]
     stress_pct_drop = round(_pct_change(stress_vals[0], final_stress), 1)
 
     # Did stress peak early and fall? Or did it build up over time?
     if peak_stress_month <= 2:
-        stress_shape = "peaked at month 1 then steadily declined — policy had immediate calming effect"
+        stress_shape = (
+            "peaked at month 1 then steadily declined — policy had immediate calming effect"
+        )
     elif peak_stress_month >= n - 2:
         stress_shape = "built up throughout the period — policy increased chronic stress over time"
     else:
-        stress_shape = f"peaked at month {peak_stress_month} then recovered — mid-period stress spike"
+        stress_shape = (
+            f"peaked at month {peak_stress_month} then recovered — mid-period stress spike"
+        )
 
     # ── Healthy Worker Effect detection ────────────────────────────────────────
     # When workload INCREASES but avg stress DROPS, the most likely cause is NOT
@@ -295,14 +324,17 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     # This is the "healthy worker survival bias" and must be flagged so the LLM
     # does not present it as a positive policy outcome.
     total_voluntary_for_hwe = sum((_safe_mean(r, "attrition_count") or 0) for r in results)
-    hwe_attrition_rate = (total_voluntary_for_hwe / max(hc_start, 1)) * 100 if 'hc_start' in dir() else 0
     healthy_worker_effect_warning = None
     if (
         scenario["is_workload_increase"]
-        and stress_pct_drop < -1.0          # stress measurably dropped
-        and total_voluntary_for_hwe > 20    # meaningful attrition occurred
+        and stress_pct_drop < -1.0  # stress measurably dropped
+        and total_voluntary_for_hwe > 20  # meaningful attrition occurred
     ):
-        workload_pct = round((config.get("workload_multiplier", 1.0) - 1) * 100) if isinstance(config, dict) else 25
+        workload_pct = (
+            round((config.get("workload_multiplier", 1.0) - 1) * 100)
+            if isinstance(config, dict)
+            else 25
+        )
         healthy_worker_effect_warning = (
             f"HEALTHY WORKER EFFECT DETECTED: Workload INCREASED by {workload_pct}% "
             f"yet average stress DROPPED by {abs(stress_pct_drop):.1f}%. "
@@ -318,16 +350,16 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     # ── Burnout analysis ───────────────────────────────────────────────────────
 
     total_burnout = sum((_safe_mean(r, "burnout_count") or 0) for r in results)
-    end_burnout   = _safe_mean(end, "burnout_count") or 0
-    end_hc        = _safe_mean(end, "headcount") or 1
+    end_burnout = _safe_mean(end, "burnout_count") or 0
+    end_hc = _safe_mean(end, "headcount") or 1
     burnout_rate_pct = round((end_burnout / end_hc) * 100, 2)
 
     # ── Headcount analysis ─────────────────────────────────────────────────────
 
     hc_start = summary.get("initial_headcount", _safe_mean(start, "headcount") or 0)
-    hc_end   = _safe_mean(end,   "headcount") or 0
-    hc_net   = round(hc_end - hc_start, 1)
-    hc_pct   = round(_pct_change(hc_start, hc_end), 2)
+    hc_end = _safe_mean(end, "headcount") or 0
+    hc_net = round(hc_end - hc_start, 1)
+    hc_pct = round(_pct_change(hc_start, hc_end), 2)
 
     # ── Layoff-adjusted true workforce loss ────────────────────────────────────
     # This is the fix for the "attrition illusion" bug:
@@ -337,8 +369,8 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
     # We must compute this and flag it explicitly so the LLM cannot
     # praise improved voluntary attrition while ignoring forced exits.
 
-    total_layoffs      = scenario["total_layoffs"]
-    total_voluntary    = sum((_safe_mean(r, "attrition_count") or 0) for r in results)
+    total_layoffs = scenario["total_layoffs"]
+    total_voluntary = sum((_safe_mean(r, "attrition_count") or 0) for r in results)
     total_workforce_loss = total_voluntary + total_layoffs
     true_loss_rate_pct = round((total_workforce_loss / hc_start) * 100, 2) if hc_start > 0 else 0
 
@@ -396,10 +428,10 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         fear_suppression_note = None
         attrition_verdict_override = None
 
-    annual_attr      = summary.get("annual_attrition_pct", 0)
-    baseline_attr    = summary.get("baseline_annual_attrition_pct", None)
+    annual_attr = summary.get("annual_attrition_pct", 0)
+    baseline_attr = summary.get("baseline_annual_attrition_pct", None)
     attr_vs_baseline = None
-    attr_vs_verdict  = "unknown"
+    attr_vs_verdict = "unknown"
     if baseline_attr:
         attr_vs_baseline = round(annual_attr - baseline_attr, 2)
         if attr_vs_baseline < -2:
@@ -422,11 +454,11 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
             continue
         v = m["verdict"]
         score = {
-            "deteriorating":          3,
+            "deteriorating": 3,
             "slightly deteriorating": 2,
-            "stable":                 1,
-            "slightly improving":     0,
-            "improving":              0,
+            "stable": 1,
+            "slightly improving": 0,
+            "improving": 0,
         }.get(v, 0)
         risk_scores[key] = score
 
@@ -445,98 +477,141 @@ def _compute_analytics(sim_result: dict, policy_config: dict | None) -> dict:
         dominant_risk_label = metrics.get(dominant_risk, {}).get("label", "unknown")
 
     # ── Composite health score (0–100, higher = healthier org) ────────────────
-    # Weighted average of metric verdicts
+    # HYBRID: 70% Absolute State (where the org IS) + 30% Momentum (which direction it's heading)
+    # This ensures healthy companies score high for staying healthy, while still
+    # rewarding improvement in struggling companies.
 
     weights = {
-        "stress":       0.25,
-        "attrition":    0.25,
-        "motivation":   0.25,  # +0.05 from removed loyalty weight
+        "stress": 0.25,
+        "attrition": 0.25,
+        "motivation": 0.25,
         "productivity": 0.15,
-        "wlb":          0.10,  # +0.05 from removed loyalty weight
-    }
-    verdict_score = {
-        "improving":             100,
-        "slightly improving":     75,
-        "stable":                 50,
-        "slightly deteriorating": 25,
-        "deteriorating":           0,
+        "wlb": 0.10,
     }
 
-    # Attrition health: invert (lower attrition = better health)
+    # ── 70% Component: Absolute State Score ────────────────────────────────────
+    # Grade each metric based on its FINAL end-of-simulation value.
+    # Uses the interpretation guide thresholds from the prompt builder.
+
+    # Stress: 0.0 = perfect (100), 0.05 = elevated (70), 0.15 = high risk (30), 0.3+ = crisis (0)
+    stress_end = metrics["stress"]["end"] if metrics["stress"].get("available") else 0.1
+    abs_stress = max(0, min(100, 100 - (stress_end / 0.3) * 100))
+
+    # Motivation: scale 0.0–1.0 internally, 0.7 = healthy, 0.4 = disengagement
+    motiv_end = metrics["motivation"]["end"] if metrics["motivation"].get("available") else 0.5
+    abs_motivation = max(0, min(100, (motiv_end / 0.7) * 100))
+
+    # Productivity: 1.0 = baseline (100), 0.85 = crisis threshold (50), 0.5 = collapse (0)
+    prod_end = metrics["productivity"]["end"] if metrics["productivity"].get("available") else 0.9
+    abs_productivity = max(0, min(100, (prod_end / 1.0) * 100))
+
+    # WLB: scale 1.0–4.0, map linearly to 0–100
+    wlb_end = metrics["wlb"]["end"] if metrics["wlb"].get("available") else 2.5
+    abs_wlb = max(0, min(100, ((wlb_end - 1.0) / 3.0) * 100))
+
+    # Attrition: invert (lower attrition = better health)
     if baseline_attr:
-        attr_health = max(0, min(100, 50 + (baseline_attr - annual_attr) * 5))
+        abs_attrition = max(0, min(100, 50 + (baseline_attr - annual_attr) * 5))
     else:
-        attr_health = 50
+        abs_attrition = 50
 
-    health_score = (
-        weights["stress"]       * verdict_score.get(metrics["stress"]["verdict"], 50) +
-        weights["attrition"]    * attr_health +
-        weights["motivation"]   * verdict_score.get(metrics["motivation"]["verdict"], 50) +
-        weights["productivity"] * verdict_score.get(metrics["productivity"]["verdict"], 50) +
-        weights["wlb"]          * verdict_score.get(metrics["wlb"]["verdict"], 50)
+    absolute_score = (
+        weights["stress"] * abs_stress
+        + weights["attrition"] * abs_attrition
+        + weights["motivation"] * abs_motivation
+        + weights["productivity"] * abs_productivity
+        + weights["wlb"] * abs_wlb
     )
+
+    # ── 30% Component: Momentum Score ──────────────────────────────────────────
+    # Grade each metric based on its TREND direction (improving/stable/deteriorating).
+    # This rewards companies that are making progress even if they aren't healthy yet.
+
+    verdict_score = {
+        "improving": 100,
+        "slightly improving": 75,
+        "stable": 50,
+        "slightly deteriorating": 25,
+        "deteriorating": 0,
+    }
+
+    momentum_score = (
+        weights["stress"] * verdict_score.get(metrics["stress"]["verdict"], 50)
+        + weights["attrition"] * abs_attrition
+        + weights["motivation"] * verdict_score.get(metrics["motivation"]["verdict"], 50)
+        + weights["productivity"] * verdict_score.get(metrics["productivity"]["verdict"], 50)
+        + weights["wlb"] * verdict_score.get(metrics["wlb"]["verdict"], 50)
+    )
+
+    # ── Final Hybrid Score ─────────────────────────────────────────────────────
+    health_score = (0.70 * absolute_score) + (0.30 * momentum_score)
+
     health_label = (
-        "healthy"     if health_score >= 65 else
-        "mixed"       if health_score >= 45 else
-        "at risk"     if health_score >= 25 else
-        "critical"
+        "healthy"
+        if health_score >= 65
+        else "mixed"
+        if health_score >= 45
+        else "at risk"
+        if health_score >= 25
+        else "critical"
     )
 
     # ── Assemble ───────────────────────────────────────────────────────────────
 
     return {
-        "scenario":             scenario,
-        "metrics":              metrics,
+        "scenario": scenario,
+        "metrics": metrics,
         "attrition": {
-            "annual_pct":              annual_attr,
-            "baseline_pct":            baseline_attr,
-            "vs_baseline_pts":         attr_vs_baseline,
-            "vs_baseline_verdict":     attr_vs_verdict,
-            "avg_monthly_rate":        round(avg_monthly_attr, 3),
-            "peak_month":              peak_attr.get("month"),
-            "peak_rate_pct":           peak_attr.get("rate_pct"),
-            "acceleration":            attr_acceleration,
-            "trend":                   attr_trend,
-            "total_voluntary_exits":   round(total_voluntary, 1),
-            "total_layoffs":           round(total_layoffs, 1),
-            "total_workforce_loss":    round(total_workforce_loss, 1),
-            "true_loss_rate_pct":      true_loss_rate_pct,
+            "annual_pct": annual_attr,
+            "baseline_pct": baseline_attr,
+            "vs_baseline_pts": attr_vs_baseline,
+            "vs_baseline_verdict": attr_vs_verdict,
+            "avg_monthly_rate": round(avg_monthly_attr, 3),
+            "peak_month": peak_attr.get("month"),
+            "peak_rate_pct": peak_attr.get("rate_pct"),
+            "acceleration": attr_acceleration,
+            "trend": attr_trend,
+            "total_voluntary_exits": round(total_voluntary, 1),
+            "total_layoffs": round(total_layoffs, 1),
+            "total_workforce_loss": round(total_workforce_loss, 1),
+            "true_loss_rate_pct": true_loss_rate_pct,
             "layoff_pct_of_headcount": layoff_pct_of_headcount,
             # Voluntary rate recalculated on the survivor pool (excludes layoffs from denominator)
             # This is the like-for-like metric for comparing across different layoff sizes.
             "voluntary_rate_on_survivors": voluntary_rate_on_survivors,
             "layoff_suppression_warning": layoff_suppression_warning,
-            "fear_suppression_note":   fear_suppression_note,
+            "fear_suppression_note": fear_suppression_note,
             "attrition_verdict_override": attrition_verdict_override,
         },
-        "stress_shape":         stress_shape,
-        "stress_peak":          round(peak_stress, 4),
-        "stress_peak_month":    peak_stress_month,
-        "stress_pct_change":    stress_pct_drop,
+        "stress_shape": stress_shape,
+        "stress_peak": round(peak_stress, 4),
+        "stress_peak_month": peak_stress_month,
+        "stress_pct_change": stress_pct_drop,
         "healthy_worker_effect_warning": healthy_worker_effect_warning,
         "burnout": {
-            "total_events":      round(total_burnout, 1),
-            "end_period_count":  round(end_burnout, 1),
+            "total_events": round(total_burnout, 1),
+            "end_period_count": round(end_burnout, 1),
             "end_period_rate_pct": burnout_rate_pct,
         },
         "headcount": {
-            "start":  round(hc_start),
-            "end":    round(hc_end),
-            "net":    round(hc_net),
+            "start": round(hc_start),
+            "end": round(hc_end),
+            "net": round(hc_net),
             "pct_change": hc_pct,
         },
-        "dominant_risk":        dominant_risk_label,
-        "health_score":         round(health_score, 1),
-        "health_label":         health_label,
-        "realism_flag":         summary.get("realism_flag", "unknown"),
-        "policy_name":          summary.get("policy_name", "unknown"),
-        "duration_months":      summary.get("duration_months", 12),
-        "runs":                 sim_result.get("runs", "?"),
-        "config":               config,
+        "dominant_risk": dominant_risk_label,
+        "health_score": round(health_score, 1),
+        "health_label": health_label,
+        "realism_flag": summary.get("realism_flag", "unknown"),
+        "policy_name": summary.get("policy_name", "unknown"),
+        "duration_months": summary.get("duration_months", 12),
+        "runs": sim_result.get("runs", "?"),
+        "config": config,
     }
 
 
 # ── Prompt Builder ─────────────────────────────────────────────────────────────
+
 
 def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     """
@@ -545,18 +620,20 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     warnings — not raw numbers to interpret.
     Its job is to write narrative, not do math or classify scenarios.
     """
-    m    = analytics["metrics"]
-    att  = analytics["attrition"]
-    hc   = analytics["headcount"]
-    bur  = analytics["burnout"]
-    sc   = analytics["scenario"]
+    m = analytics["metrics"]
+    att = analytics["attrition"]
+    hc = analytics["headcount"]
+    bur = analytics["burnout"]
+    sc = analytics["scenario"]
 
     def fmt_metric(key: str) -> str:
         mm = m.get(key, {})
         if not mm.get("available"):
             return f"  {key}: data unavailable"
-        arrow = "✓" if mm["verdict"] in ("improving", "slightly improving") else (
-                "✗" if mm["verdict"] in ("deteriorating", "slightly deteriorating") else "~"
+        arrow = (
+            "✓"
+            if mm["verdict"] in ("improving", "slightly improving")
+            else ("✗" if mm["verdict"] in ("deteriorating", "slightly deteriorating") else "~")
         )
         return (
             f"  {arrow} {mm['label']:20s}: {mm['start']:.4f} → {mm['end']:.4f}  "
@@ -574,7 +651,6 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         f"REALISM CHECK          : {analytics['realism_flag']}",
         f"ORG HEALTH SCORE       : {analytics['health_score']:.1f}/100 ({analytics['health_label'].upper()})",
         "",
-
         # ── SCENARIO CONTEXT (most important block — sets the mental model) ──
         "── SCENARIO CLASSIFICATION ──────────────────────────────────",
         f"  Type                 : {sc['scenario_type']}",
@@ -659,25 +735,37 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         f"  {sc['workload_meaning']}",
     ]
     if config.get("layoff_ratio", 0):
-        lines.append(f"  Layoffs          : {config['layoff_ratio']*100:.0f}% of workforce laid off")
+        lines.append(
+            f"  Layoffs          : {config['layoff_ratio']*100:.0f}% of workforce laid off"
+        )
     if config.get("wlb_boost", 0):
-        lines.append(f"  WLB boost        : +{config['wlb_boost']} points — schedule/flexibility improvement")
+        lines.append(
+            f"  WLB boost        : +{config['wlb_boost']} points — schedule/flexibility improvement"
+        )
     if config.get("bonus", 0):
         # Map the internal bonus float to an overtime premium description
-        bonus_val = config['bonus']
+        bonus_val = config["bonus"]
         if bonus_val >= 2.0:
             pay_approx = "~1.5x–2x overtime rate (intensive mandatory overtime compensation)"
         elif bonus_val >= 1.0:
             pay_approx = "~10–15% overtime premium (moderate extra pay for extra work)"
         else:
             pay_approx = "~5–10% overtime supplement (partial compensation for extra load)"
-        lines.append(f"  Overtime pay     : {bonus_val} [{pay_approx}] — employees compensated for extra workload")
-        lines.append(f"  NOTE: This is OVERTIME PAY tied to the workload increase, not a general salary raise.")
-        lines.append(f"  It partially offsets the stress of more work, but is transactional — not a retention signal like a permanent raise.")
+        lines.append(
+            f"  Overtime pay     : {bonus_val} [{pay_approx}] — employees compensated for extra workload"
+        )
+        lines.append(
+            "  NOTE: This is OVERTIME PAY tied to the workload increase, not a general salary raise."
+        )
+        lines.append(
+            "  It partially offsets the stress of more work, but is transactional — not a retention signal like a permanent raise."
+        )
     if not config.get("hiring_active", True):
         lines.append("  Hiring           : FROZEN — no backfill for exits")
     if config.get("shock_factor", 0) > 0.3:
-        lines.append(f"  Peer contagion   : HIGH ({config['shock_factor']}) — departures trigger further exits")
+        lines.append(
+            f"  Peer contagion   : HIGH ({config['shock_factor']}) — departures trigger further exits"
+        )
     lines.append("")
 
     # ── HEADCOUNT ───────────────────────────────────────────────────────────────────
@@ -688,7 +776,9 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         f"  Net   : {hc['net']:+.0f} employees ({hc['pct_change']:+.1f}%)",
     ]
     if att.get("total_layoffs", 0) > 0:
-        lines.append(f"  Of which {att['total_layoffs']:.0f} were FORCED LAYOFFS — not voluntary exits")
+        lines.append(
+            f"  Of which {att['total_layoffs']:.0f} were FORCED LAYOFFS — not voluntary exits"
+        )
     lines.append("")
 
     # ── ATTRITION ───────────────────────────────────────────────────────────────────
@@ -702,8 +792,8 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
         lines += [
             f"  TRUE workforce loss rate (incl. layoffs)  : {att['true_loss_rate_pct']}%",
             f"  Voluntary rate on SURVIVOR pool (bias-free): {att.get('voluntary_rate_on_survivors', 'N/A')}%",
-            f"  ← USE TRUE LOSS RATE in your situation summary, NOT the voluntary rate.",
-            f"  ← Survivor-pool rate removes denominator bias — use it for cross-scenario comparisons.",
+            "  ← USE TRUE LOSS RATE in your situation summary, NOT the voluntary rate.",
+            "  ← Survivor-pool rate removes denominator bias — use it for cross-scenario comparisons.",
         ]
         if att.get("fear_suppression_note"):
             lines += [
@@ -779,7 +869,7 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     ]
 
     # ── DOMINANT RISK AND TASK ────────────────────────────────────────────────
-    dominant_risk_label = analytics['dominant_risk']
+    dominant_risk_label = analytics["dominant_risk"]
     is_all_healthy = dominant_risk_label == "Attrition Sustainability"
 
     lines += [
@@ -819,7 +909,9 @@ def _build_prompt(analytics: dict, user_intent: str | None) -> str:
     elif sc["is_workload_reduction"]:
         lines.append("  ✓ Stress drop is expected and positive — credit the workload reduction.")
     elif is_all_healthy and config.get("bonus", 0) > 0:
-        lines.append("  ✓ Pay increase is actively buffering workload stress — acknowledge this explicitly in the briefing.")
+        lines.append(
+            "  ✓ Pay increase is actively buffering workload stress — acknowledge this explicitly in the briefing."
+        )
 
     lines.append("  Recommendation must address the DOMINANT RISK DRIVER.")
 
@@ -880,6 +972,7 @@ Produce up to 3 risks. If the scenario is mostly positive and metrics are improv
 
 # ── Output Validator ───────────────────────────────────────────────────────────
 
+
 def _validate_briefing(briefing: dict, analytics: dict) -> dict:
     """
     Post-process the LLM output.
@@ -890,15 +983,17 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
     VALID_VERDICTS = {"improving", "stable", "deteriorating"}
 
     perf = briefing.get("performance", {})
-    att  = analytics["attrition"]
-    sc   = analytics["scenario"]
+    att = analytics["attrition"]
+    sc = analytics["scenario"]
 
     # ── Enforce stress verdict ─────────────────────────────────────────────────
     computed_stress = analytics["metrics"]["stress"]["verdict"]
     simplified_stress = (
-        "improving"     if "improving" in computed_stress else
-        "deteriorating" if "deteriorating" in computed_stress else
-        "stable"
+        "improving"
+        if "improving" in computed_stress
+        else "deteriorating"
+        if "deteriorating" in computed_stress
+        else "stable"
     )
     if perf.get("stress_verdict") != simplified_stress:
         perf["stress_verdict"] = simplified_stress
@@ -918,9 +1013,11 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
     else:
         # Normal case: derive from baseline comparison
         computed_attr = (
-            "improving"     if att["vs_baseline_verdict"] == "better than baseline" else
-            "deteriorating" if "worse" in att["vs_baseline_verdict"] else
-            "stable"
+            "improving"
+            if att["vs_baseline_verdict"] == "better than baseline"
+            else "deteriorating"
+            if "worse" in att["vs_baseline_verdict"]
+            else "stable"
         )
         if perf.get("attrition_verdict") not in VALID_VERDICTS:
             perf["attrition_verdict"] = computed_attr
@@ -928,9 +1025,11 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
     # ── Enforce productivity verdict ───────────────────────────────────────────
     computed_prod = analytics["metrics"]["productivity"]["verdict"]
     simplified_prod = (
-        "improving"     if "improving" in computed_prod else
-        "deteriorating" if "deteriorating" in computed_prod else
-        "stable"
+        "improving"
+        if "improving" in computed_prod
+        else "deteriorating"
+        if "deteriorating" in computed_prod
+        else "stable"
     )
     if perf.get("productivity_verdict") not in VALID_VERDICTS:
         perf["productivity_verdict"] = simplified_prod
@@ -946,14 +1045,16 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
     # ── Ensure at least 1 risk, max 3 ──────────────────────────────────────────
     risks = briefing.get("risks", [])
     if not risks:
-        risks.append({
-            "title":    "Continued monitoring required",
-            "severity": "low",
-            "detail":   (
-                "Validate simulation outcomes against real workforce data after 60 days. "
-                "Confidence increases with more Monte Carlo runs and longer observation periods."
-            )
-        })
+        risks.append(
+            {
+                "title": "Continued monitoring required",
+                "severity": "low",
+                "detail": (
+                    "Validate simulation outcomes against real workforce data after 60 days. "
+                    "Confidence increases with more Monte Carlo runs and longer observation periods."
+                ),
+            }
+        )
     briefing["risks"] = risks[:3]
 
     # ── Ensure required top-level fields ──────────────────────────────────────
@@ -966,10 +1067,11 @@ def _validate_briefing(briefing: dict, analytics: dict) -> dict:
 
 # ── Main Entry Point ───────────────────────────────────────────────────────────
 
+
 def run_reasoning_chain(
-    sim_result:    dict,
+    sim_result: dict,
     policy_config: dict | None = None,
-    user_intent:   str  | None = None,
+    user_intent: str | None = None,
 ) -> dict:
     """
     Run the CEO reasoning chain over a completed simulation result.
@@ -995,7 +1097,7 @@ def run_reasoning_chain(
 
     messages = [
         {"role": "system", "content": REASONING_SYSTEM_PROMPT},
-        {"role": "user",   "content": prompt},
+        {"role": "user", "content": prompt},
     ]
 
     groq_api_key = os.getenv("GROQ_API_KEY")
@@ -1015,10 +1117,10 @@ def run_reasoning_chain(
             api_key=groq_api_key,
         )
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # ← upgrade from 8b-instant
+            model="llama-3.3-70b-versatile",  # ← upgrade from 8b-instant
             messages=messages,
             response_format={"type": "json_object"},
-            temperature=0.15,   # low temp = consistent structured output
+            temperature=0.15,  # low temp = consistent structured output
             max_tokens=1200,
         )
         raw_json = json.loads(response.choices[0].message.content)
@@ -1039,16 +1141,14 @@ def run_reasoning_chain(
             )
             raw_json = json.loads(response.choices[0].message.content)
         except Exception as fallback_e:
-            raise RuntimeError(
-                f"Both Groq and Ollama failed. Ollama error: {fallback_e}"
-            )
+            raise RuntimeError(f"Both Groq and Ollama failed. Ollama error: {fallback_e}")
 
     # Step 4: Validate and correct LLM output
     briefing = _validate_briefing(raw_json, analytics)
 
     # Step 5: Return with full metadata
     return {
-        "briefing":   briefing,
-        "analytics":  analytics,    # expose pre-computed analytics for frontend use
+        "briefing": briefing,
+        "analytics": analytics,  # expose pre-computed analytics for frontend use
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

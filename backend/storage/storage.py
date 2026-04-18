@@ -10,15 +10,12 @@
 import base64
 import io
 import json
-import os
 from datetime import datetime
 
 import joblib
 
-
-
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _encode_pkl(obj) -> str:
     """Serialize any joblib-serializable object to a base64 string."""
@@ -35,6 +32,7 @@ def _decode_pkl(b64: str):
 
 # ── public API ────────────────────────────────────────────────────────────────
 
+
 def save_artifact(name: str, data, artifact_type: str) -> None:
     """
     Upsert an artifact row in the ml_artifact table.
@@ -46,6 +44,7 @@ def save_artifact(name: str, data, artifact_type: str) -> None:
     artifact_type : "pkl" | "json"
     """
     from sqlmodel import Session
+
     from backend.db.database import engine
     from backend.db.models import MLArtifact
 
@@ -54,16 +53,18 @@ def save_artifact(name: str, data, artifact_type: str) -> None:
     with Session(engine) as session:
         existing = session.get(MLArtifact, name)
         if existing:
-            existing.data          = encoded
+            existing.data = encoded
             existing.artifact_type = artifact_type
-            existing.updated_at    = datetime.utcnow()
+            existing.updated_at = datetime.utcnow()
             session.add(existing)
         else:
-            session.add(MLArtifact(
-                name=name,
-                artifact_type=artifact_type,
-                data=encoded,
-            ))
+            session.add(
+                MLArtifact(
+                    name=name,
+                    artifact_type=artifact_type,
+                    data=encoded,
+                )
+            )
         session.commit()
     print(f"[storage] Artifact '{name}' ({artifact_type}) saved to DB.")
 
@@ -77,6 +78,7 @@ def load_artifact(name: str):
     dict if artifact_type == "json", deserialized object if "pkl", None if not found.
     """
     from sqlmodel import Session
+
     from backend.db.database import engine
     from backend.db.models import MLArtifact
 
@@ -89,6 +91,3 @@ def load_artifact(name: str):
     if row.artifact_type == "pkl":
         return _decode_pkl(row.data)
     return json.loads(row.data)
-
-
-

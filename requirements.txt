@@ -29,6 +29,14 @@ openai>=1.10.0
 # Testing & Quality Assurance
 pytest
 pytest-cov
-pylint
 httpx
+
+# Observability
+sentry-sdk[fastapi]
+loguru
+
+# Coding Standards
+ruff
+pre-commit
+
 pinecone[grpc]

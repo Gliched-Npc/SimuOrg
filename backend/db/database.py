@@ -1,7 +1,8 @@
-from sqlmodel import SQLModel, create_engine, Session
+import os
+
 from dotenv import load_dotenv
 from sqlalchemy import text
-import os
+from sqlmodel import Session, SQLModel, create_engine
 
 load_dotenv()
 
@@ -10,9 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set in .env file")
 
-engine = create_engine(DATABASE_URL,
+engine = create_engine(
+    DATABASE_URL,
     pool_pre_ping=True,
-    connect_args={"check_same_thread":False} if "sqlite" in DATABASE_URL else {})
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+)
 
 
 def _run_migrations():

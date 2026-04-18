@@ -1,13 +1,16 @@
 # backend/core/llm/scenario_retriever.py
 import os
+
 from pinecone import Pinecone
+
 from backend.core.llm.extended_scenarios import EXTENDED_SCENARIOS
+
 
 class ScenarioRetriever:
     def __init__(self):
         self.api_key = os.getenv("PINECONE_API_KEY")
         self.index_name = os.getenv("PINECONE_INDEX_NAME", "simuorg-scenarios")
-        
+
         if self.api_key:
             self.pc = Pinecone(api_key=self.api_key)
             self.index = self.pc.Index(self.index_name)
@@ -28,32 +31,25 @@ class ScenarioRetriever:
         try:
             # 1. Generate the semantic dense vector for the user query
             embedding = self.pc.inference.embed(
-                model="llama-text-embed-v2",
-                inputs=[user_text],
-                parameters={"input_type": "query"}
+                model="llama-text-embed-v2", inputs=[user_text], parameters={"input_type": "query"}
             )
             query_vector = embedding[0].values
-            
+
             # 2. Search Pinecone
-            response = self.index.query(
-                vector=query_vector,
-                top_k=k,
-                include_metadata=True
-            )
-            
+            response = self.index.query(vector=query_vector, top_k=k, include_metadata=True)
+
             result_text = ""
             for match in response.matches:
                 # Minimum threshold check can go here if needed, Pinecone scores range up to 1.0
                 if "content" in match.metadata:
                     result_text += match.metadata["content"] + "\n\n"
-                    
+
             if not result_text.strip():
-                 result_text = EXTENDED_SCENARIOS[0]["content"] + "\n\n"
-                 
+                result_text = EXTENDED_SCENARIOS[0]["content"] + "\n\n"
+
             return result_text.strip()
 
         except Exception as e:
             print(f"ERROR: Pinecone RAG query failed: {e}")
             # Fallback guarantee to ensure pipeline doesn't break
             return EXTENDED_SCENARIOS[0]["content"]
-
