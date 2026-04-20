@@ -37,6 +37,21 @@ def check_data_quality(
         )
         return issues
 
+    # ── Identical Clones (Contamination) ──
+    df_no_id = df.drop(columns=["EmployeeID", "EmployeeNumber", "ManagerID"], errors="ignore")
+    clone_count = int(df_no_id.duplicated().sum())
+    if clone_count > 0:
+        trust_score -= 15 if clone_count > total * 0.1 else 5
+        severity = "error" if clone_count > total * 0.3 else "warning"
+        issues.append(
+            {
+                "severity": severity,
+                "code": "identical_clones_detected",
+                "message": f"CONSEQUENCE: {clone_count} rows are mathematically identical clones of other employees across all behavioral columns. This means the dataset was likely copy-pasted or merged twice. The AI expects unique humans—it will 'hallucinate' artificially high accuracy by memorizing these clone instances instead of learning real behavioral patterns.",
+                "suggestion": "SOLUTION: [OPTION 1] Cancel upload and fix your HR export to stop duplicating rows. [OPTION 2] Proceed anyway, but be aware the AI metrics will be distorted and hallucinated.",
+            }
+        )
+
     # ── Attrition rate ──
     attrition_count = (df["Attrition"] == "Yes").sum()
     attrition_rate = attrition_count / total
@@ -191,7 +206,7 @@ def check_data_quality(
                 if severity == "warning":
                     trust_score -= 8 if is_critical else 3
                 else:
-                    trust_score -= 2 if is_critical else 1  # Sligth penalty for info-level gaps
+                    trust_score -= 2 if is_critical else 1  # Slight penalty for info-level gaps
                 issues.append(
                     {
                         "severity": severity,

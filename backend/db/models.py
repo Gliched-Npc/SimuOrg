@@ -1,9 +1,13 @@
 # backend/models.py
 
 import uuid as _uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlmodel import Field, SQLModel
+
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
 
 
 class Employee(SQLModel, table=True):
@@ -58,8 +62,8 @@ class SimulationJob(SQLModel, table=True):
     runs: int | None = Field(default=None)
     duration_months: int | None = Field(default=None)
     seed: int | None = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)
     data_issues: str | None = Field(default=None)
     error: str | None = Field(default=None)
     result: str | None = Field(default=None)  # JSON string
@@ -76,7 +80,7 @@ class MLArtifact(SQLModel, table=True):
     name: str = Field(primary_key=True)  # "quit_model" | "burnout" | "calibration" | "quality"
     artifact_type: str = Field(default="json")  # "pkl" | "json"
     data: str = Field()  # base64 str for pkl, raw JSON str for json
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=get_utc_now)
 
 
 class PolicyGenerationLog(SQLModel, table=True):
@@ -88,7 +92,7 @@ class PolicyGenerationLog(SQLModel, table=True):
     user_prompt: str = Field()  # raw CEO input text
     generated_config: str = Field()  # JSON of SimulationConfig
     justification: str = Field(default="{}")  # JSON of LLM justification
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
 
 
 class OrchestrateJob(SQLModel, table=True):
@@ -101,5 +105,5 @@ class OrchestrateJob(SQLModel, table=True):
     user_text: str = Field()  # original CEO input
     result: str | None = Field(default=None)  # full JSON payload when done
     error: str | None = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_utc_now)
+    updated_at: datetime = Field(default_factory=get_utc_now)

@@ -84,8 +84,6 @@ def run_training_job(quality_report: dict = None) -> dict:
     model_quality = train_attrition_model(pre_clean_metrics=pre_clean)
     train_burnout_estimator()
     _agent_module._quit_model_cache = None  # bust lazy-load cache
-    _agent_module._quit_features_cache = None  # force reload of schema
-    _agent_module._quit_encoders_cache = None  # force reload of encoders
     cal = calibrate()
 
     return {

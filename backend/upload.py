@@ -221,50 +221,6 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int, int, dict, lis
     return df, duplicates_removed, junk_removed, null_rates, cleaning_audit
 
 
-# def validate_data_quality(df: pd.DataFrame, duplicates_removed: int = 0) -> dict:
-#     warnings = []
-#     errors   = []
-#     total    = len(df)
-
-#     attrition_count = (df['Attrition'] == 'Yes').sum()
-#     attrition_rate  = attrition_count / total
-#     if attrition_rate > 0.30:
-#         warnings.append(
-#             f"High attrition rate detected: {attrition_rate*100:.1f}% "
-#             f"(industry average is 10-20%). Data may be unreliable."
-#         )
-
-#     if total < 50:
-#         warnings.append(
-#             f"Small dataset: only {total} employees. "
-#             f"Simulation results may not be statistically reliable."
-#         )
-
-#     duplication_rate = (
-#         duplicates_removed / (total + duplicates_removed)
-#         if (total + duplicates_removed) > 0
-#         else 0
-#     )
-#     if duplication_rate > 0.20:
-#         warnings.append("High duplication rate detected before cleaning. Data quality may be poor.")
-
-#     invalid_levels = ((df['JobLevel'] < 1) | (df['JobLevel'] > 5)).sum()
-#     if invalid_levels > total * 0.10:
-#         warnings.append(
-#             f"{invalid_levels} employees had invalid job levels (outside 1-5). "
-#             f"These were clipped automatically."
-#         )
-
-#     negative_income = (df['MonthlyIncome'] < 0).sum()
-#     if negative_income > 0:
-#         warnings.append(
-#             f"{negative_income} employees had negative monthly income. "
-#             f"These were set to 0 automatically."
-#         )
-
-#     return {"warnings": warnings, "errors": errors, "passed": len(errors) == 0}
-
-
 def ingest_from_dataframe(df: pd.DataFrame) -> dict:
     employees = []
     skipped = 0

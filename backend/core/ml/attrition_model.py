@@ -354,6 +354,8 @@ def train_attrition_model(pre_clean_metrics: dict = None):
 
     train_accuracy = accuracy_score(y_train, y_pred_train)
     test_accuracy = accuracy_score(y_test, y_pred_test)
+    train_recall = recall_score(y_train, y_pred_train, zero_division=0)
+    test_recall = recall_score(y_test, y_pred_test, zero_division=0)
     auc = roc_auc_score(y_test, test_probs)
 
     print("\n=== Test Performance (held-out, never seen during training or tuning):")
@@ -363,9 +365,11 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     print(f"\n=== Training Performance (pre-{strategy} train set):")
     print(classification_report(y_train, y_pred_train, target_names=["Stays", "Quits"]))
 
-    print("\n=== Accuracy Summary:")
+    print("\n=== Performance Summary:")
     print(f"  Training Accuracy : {train_accuracy*100:.2f}%")
     print(f"  Test Accuracy     : {test_accuracy*100:.2f}%")
+    print(f"  Training Recall   : {train_recall*100:.2f}%")
+    print(f"  Test Recall       : {test_recall*100:.2f}%")
     print(f"  Overfitting Gap   : {(train_accuracy - test_accuracy)*100:.2f}%")
     print(f"  AUC-ROC           : {auc:.4f}")
 
@@ -433,6 +437,8 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         "cv_auc_std": round(float(cv_scores.std()), 4),
         "test_accuracy": round(float(test_accuracy), 4),
         "train_accuracy": round(float(train_accuracy), 4),
+        "test_recall": round(float(test_recall), 4),
+        "train_recall": round(float(train_recall), 4),
         "features_used": len(FEATURES),
         "bonus_features": [f for f in OPTIONAL_FEATURES if f in FEATURES],
         "top_drivers": top_features,

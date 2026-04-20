@@ -54,6 +54,7 @@ export default function UploadData() {
   const [trainStage, setTrainStage] = useState(-1); // -1 = not started
   const [trainDone, setTrainDone] = useState(false);
   const [schemaOpen, setSchemaOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
@@ -809,9 +810,9 @@ export default function UploadData() {
                     {/* Confidence Badge */}
                     {(() => {
                       const score =
+                        mlMetrics.test_recall ??
                         mlMetrics.cv_auc_mean ??
                         mlMetrics.auc_roc ??
-                        mlMetrics.test_accuracy ??
                         null;
                       const pct =
                         score != null ? Math.round(score * 100) : null;
@@ -868,37 +869,33 @@ export default function UploadData() {
                   >
                     {[
                       {
-                        label: "AUC-ROC (Test)",
-                        key: mlMetrics.auc_roc,
-                        desc: "Model's ability to distinguish leavers from stayers",
-                      },
-                      {
-                        label: "CV AUC Mean",
+                        label: "Model Reliability Score",
                         key: mlMetrics.cv_auc_mean,
-                        desc: `5-fold cross-validated AUC ± ${
+                        desc: `Overall robustness of the predictive model (5-fold cross-validated ± ${
                           mlMetrics.cv_auc_std ?? "?"
-                        }`,
+                        })`,
+                        color:
+                          mlMetrics.cv_auc_mean >= 0.8
+                            ? "#4ade80"
+                            : mlMetrics.cv_auc_mean >= 0.65
+                              ? "#fbbf24"
+                              : "#f87171",
                       },
                       {
-                        label: "Test Accuracy",
-                        key: mlMetrics.test_accuracy,
-                        desc: "Overall correct predictions on held-out test data",
-                      },
-                      {
-                        label: "Train Accuracy",
-                        key: mlMetrics.train_accuracy,
-                        desc: "Accuracy on training data (for overfitting check)",
+                        label: "Flight-Risk Detection Rate",
+                        key: mlMetrics.test_recall,
+                        desc: "The percentage of true flight-risks successfully flagged by the AI on unseen data",
+                        color:
+                          mlMetrics.test_recall >= 0.7
+                            ? "#4ade80"
+                            : mlMetrics.test_recall >= 0.5
+                              ? "#fbbf24"
+                              : "#f87171",
                       },
                     ]
                       .filter((m) => m.key != null)
-                      .map(({ label, key, desc }) => {
+                      .map(({ label, key, desc, color }) => {
                         const pct = Math.round(key * 100);
-                        const color =
-                          pct >= 80
-                            ? "#4ade80"
-                            : pct >= 65
-                              ? "#fbbf24"
-                              : "#f87171";
                         return (
                           <div key={label}>
                             <div
@@ -958,6 +955,125 @@ export default function UploadData() {
                           </div>
                         );
                       })}
+
+                    {/* Advanced Metrics Toggle */}
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <button
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          background: "none",
+                          border: "none",
+                          padding: "0.4rem 0",
+                          color: "rgba(188,111,241,0.6)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          transition: "color 0.2s",
+                        }}
+                        onMouseOver={(e) =>
+                          (e.currentTarget.style.color = "#892CDC")
+                        }
+                        onMouseOut={(e) =>
+                          (e.currentTarget.style.color =
+                            "rgba(188,111,241,0.6)")
+                        }
+                      >
+                        {showAdvanced ? "Hide" : "Show"} Advanced Mathematical
+                        Diagnostics
+                        {showAdvanced ? (
+                          <ChevronUp size={14} />
+                        ) : (
+                          <ChevronDown size={14} />
+                        )}
+                      </button>
+
+                      {showAdvanced && (
+                        <div
+                          style={{
+                            marginTop: "1rem",
+                            padding: "1.25rem",
+                            background: "rgba(0,0,0,0.2)",
+                            borderRadius: 8,
+                            border: "1px dashed rgba(188,111,241,0.2)",
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "1rem",
+                            animation: "fadeIn 0.3s ease",
+                          }}
+                        >
+                          {[
+                            {
+                              label: "AUC-ROC (Test)",
+                              key: mlMetrics.auc_roc,
+                              reason:
+                                "Measures how reliably the AI can rank employees by flight risk, ensuring high-risk individuals are prioritised correctly.",
+                            },
+                            {
+                              label: "Test Accuracy",
+                              key: mlMetrics.test_accuracy,
+                              reason:
+                                "A general measure of correct predictions on unseen employees. Shows how often the AI was right when tested on data it never saw during training.",
+                            },
+                          ]
+                            .filter((m) => m.key != null)
+                            .map(({ label, key, reason }) => (
+                              <div
+                                key={label}
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 4,
+                                  background: "rgba(188,111,241,0.05)",
+                                  padding: "10px",
+                                  borderRadius: "6px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "rgba(188,111,241,0.8)",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {label}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: "0.75rem",
+                                      color: "#fff",
+                                      fontWeight: 700,
+                                      background: "rgba(188,111,241,0.15)",
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    {Math.round(key * 100)}%
+                                  </span>
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    color: "rgba(255,255,255,0.45)",
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  {reason}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Signal Strength pill */}
                     {mlMetrics.signal_strength && (

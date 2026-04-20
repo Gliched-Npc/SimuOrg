@@ -62,6 +62,17 @@ async def run_simulation_endpoint(request: SimulationRequest):
     if not load_artifact("quit_model"):
         raise HTTPException(status_code=400, detail="No trained model found.")
 
+    quality = load_artifact("quality")
+    if quality and not quality.get("simulation_reliable", True):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Simulation Denied: Your ML model is mathematically unreliable for projections "
+                "(AUC < 0.65). This usually means your attrition data is too small or lacks meaningful patterns. "
+                "Please review the Model Quality Report in the Upload dashboard and provide a stronger dataset."
+            ),
+        )
+
     with Session(engine) as session:
         if not session.exec(select(Employee)).all():
             raise HTTPException(status_code=400, detail="No employee data in database.")
@@ -156,6 +167,19 @@ async def compare_policies(request: CompareRequest):
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_a}")
     if request.policy_b != "custom" and request.policy_b not in POLICIES:
         raise HTTPException(status_code=400, detail=f"Unknown policy: {request.policy_b}")
+
+    from backend.storage.storage import load_artifact
+
+    quality = load_artifact("quality")
+    if quality and not quality.get("simulation_reliable", True):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Simulation Denied: Your ML model is mathematically unreliable for projections "
+                "(AUC < 0.65). This usually means your attrition data is too small or lacks meaningful patterns. "
+                "Please review the Model Quality Report in the Upload dashboard and provide a stronger dataset."
+            ),
+        )
 
     job_id = str(uuid.uuid4())
     with Session(engine) as session:

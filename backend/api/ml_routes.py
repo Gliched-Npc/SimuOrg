@@ -117,7 +117,7 @@ def get_model_metrics():
                 avg_perf_quit = np.mean([getattr(e, "performance_rating", 3) for e in quitters])
                 if avg_perf_quit > 3.2:
                     star_rec = (
-                        "**SCENARIO: STAR ATTRITION (HIGH PERFORMNER LEAK)**\\n"
+                        "**SCENARIO: STAR ATTRITION (HIGH PERFORMER LEAK)**\\n"
                         f"Your historical data shows that employees who left had an average performance rating of {avg_perf_quit:.1f}/4.0. "
                         "You aren't just losing headcount; you are losing your highest-value productivity drivers.\\n\\n"
                         "**SOLUTION:** This usually indicates your 'Star' performers feel under-rewarded or over-pressured. "

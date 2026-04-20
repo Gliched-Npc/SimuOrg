@@ -3,7 +3,7 @@
 # backend/workers/tasks.py
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlmodel import Session
 
@@ -27,7 +27,7 @@ def _update_job(
             raise ValueError(f"Job {job_id} not found in database.")
 
         job.status = status
-        job.updated_at = datetime.utcnow()
+        job.updated_at = datetime.now(timezone.utc)
         if result:
             job.result = json.dumps(result)
         if error:
@@ -129,7 +129,7 @@ def orchestrate_task(self, job_id: str, user_text: str):
             if not job:
                 return
             job.status = status
-            job.updated_at = datetime.utcnow()
+            job.updated_at = datetime.now(timezone.utc)
             if result is not None:
                 job.result = json.dumps(result)
             if error is not None:

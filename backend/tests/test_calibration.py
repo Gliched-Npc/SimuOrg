@@ -96,7 +96,6 @@ def full_calibration_patch(tmp_path):
 
     patches = {
         "session": patch("backend.core.ml.calibration.Session"),
-        "joblib_load": patch("backend.core.ml.calibration.joblib.load"),
         "load_artifact": patch("backend.storage.storage.load_artifact"),
         "run_sim": patch(
             "backend.core.simulation.time_engine.run_simulation", return_value=sim_result
@@ -124,15 +123,13 @@ def full_calibration_patch(tmp_path):
         "session"
     ].return_value.__enter__.return_value.exec.return_value.all.return_value = employees
 
-    # Wire up joblib mock
-    started["joblib_load"].return_value = {
+    # Wire up load_artifact mock
+    started["load_artifact"].return_value = {
         "model": mock_model,
         "threshold": 0.5,
         "features": [],
         "label_encoders": {},
     }
-
-    started["load_artifact"].return_value = started["joblib_load"].return_value
 
     yield started
 

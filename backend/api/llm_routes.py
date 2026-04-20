@@ -89,7 +89,19 @@ def orchestrate_endpoint(request: OrchestrateRequest):
       2. Fires orchestrate_task.delay() to Celery worker
       3. Returns {job_id} so the frontend can start polling
     """
+    from backend.storage.storage import load_artifact
     from backend.workers.tasks import orchestrate_task
+
+    quality = load_artifact("quality")
+    if quality and not quality.get("simulation_reliable", True):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Orchestration Denied: Your ML model is mathematically unreliable for projections "
+                "(AUC < 0.65). This usually means your attrition data is too small or lacks meaningful patterns. "
+                "Please review the Model Quality Report in the Upload dashboard and provide a stronger dataset."
+            ),
+        )
 
     with Session(engine) as session:
         job = OrchestrateJob(user_text=request.user_text)
