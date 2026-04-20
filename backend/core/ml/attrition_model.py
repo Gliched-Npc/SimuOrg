@@ -271,7 +271,9 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     # It changes per uploaded dataset (data-driven, not hardcoded).
     # More stable than SMOTE: no synthetic data, no artificial overfitting.
     X_train_final, y_train_final = X_train, y_train
-    spw_main = round(min(imbalance_ratio**0.5, 10.0), 2)
+    # By using the full `imbalance_ratio` instead of dampening it, we force XGBoost
+    # to penalize missed flight-risks heavily, naturally pushing recall up.
+    spw_main = round(min(imbalance_ratio, 10.0), 2)
     strategy = f"cost-sensitive (scale_pos_weight={spw_main})"
     print(f"  -> Imbalance ratio: {imbalance_ratio} Stays per Quitter | {strategy}")
 

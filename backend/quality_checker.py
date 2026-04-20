@@ -171,6 +171,24 @@ def check_data_quality(
             }
         )
 
+    # ── Suspicious Rounding (Synthetic Data) ──
+    if "MonthlyIncome" in df.columns and total > 500:
+        clean_income = df["MonthlyIncome"].dropna()
+        if len(clean_income) > 0:
+            unique_ratio = len(clean_income.unique()) / len(clean_income)
+            divisible_by_100_ratio = (clean_income % 100 == 0).mean()
+
+            if unique_ratio < 0.05 and divisible_by_100_ratio >= 0.80:
+                trust_score -= 10
+                issues.append(
+                    {
+                        "severity": "warning",
+                        "code": "synthetic_income_rounding",
+                        "message": f"CONSEQUENCE: The MonthlyIncome column has an unnaturally low variance ({unique_ratio*100:.1f}% unique values) and {divisible_by_100_ratio*100:.1f}% of them are perfectly rounded multiples of $100. This highly suggests artificial or bucketed data. Real-world financial sensitivity might be inaccurate.",
+                        "suggestion": "SOLUTION: [OPTION 1] Ignore if this is a test/demo dataset. [OPTION 2] Upload real, unrounded payroll data for accurate compensation analysis.",
+                    }
+                )
+
     # ── Feature Sparsity (Exact Row Counts & Column Priority) ──
     # CRITICAL: Mandatory for core simulation physics + ML signal
     CRITICAL_FEATURES = {
@@ -217,7 +235,12 @@ def check_data_quality(
                 )
 
     # ── Satisfaction columns with no variance ──
-    for col in ["JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction"]:
+    for col in [
+        "JobSatisfaction",
+        "WorkLifeBalance",
+        "EnvironmentSatisfaction",
+        "PerformanceRating",
+    ]:
         if col in df.columns and df[col].std() < 0.01:
             trust_score -= 10
             issues.append(
@@ -239,6 +262,34 @@ def check_data_quality(
             if temp_y.notna().any() and temp_y.std() > 0:
                 # Filter out columns with zero variance to avoid divide-by-zero warnings
                 valid_cols = [c for c in numeric_cols if df[c].std() > 0]
+
+                locked_columns = set()
+                # ── Mechanically Locked Features (Multi-collinearity) ──
+                if len(valid_cols) > 1 and total >= 200:
+                    corr_matrix = df[valid_cols].corr()
+                    locked_pairs = []
+
+                    for i in range(len(corr_matrix.columns)):
+                        for j in range(i + 1, len(corr_matrix.columns)):
+                            if abs(corr_matrix.iloc[i, j]) > 0.95:
+                                col1 = corr_matrix.columns[i]
+                                col2 = corr_matrix.columns[j]
+                                locked_pairs.append(f"{col1} & {col2}")
+                                locked_columns.add(col1)
+                                locked_columns.add(col2)
+
+                    if locked_pairs:
+                        trust_score -= 5
+                        pairs_str = ", ".join(locked_pairs)
+                        issues.append(
+                            {
+                                "severity": "warning",
+                                "code": "mechanically_locked_features",
+                                "message": f"CONSEQUENCE: We detected pairs of columns mathematically locked together ({pairs_str} have >0.95 correlation). The AI will treat them as redundant duplicated signals.",
+                                "suggestion": "SOLUTION: Proceed normally; advanced models naturally ignore redundant columns, though SHAP explainability graphs may split credit between them.",
+                            }
+                        )
+
                 if valid_cols:
                     corrs = df[valid_cols].apply(lambda x: x.corr(temp_y))
                     max_corr = corrs.abs().max()
@@ -256,6 +307,27 @@ def check_data_quality(
                             "suggestion": "SOLUTION: [OPTION 1] Fix the dataset by ensuring your data isn't randomized, obfuscated, or synthesized poorly. [OPTION 2] Proceed anyway, but be aware your resulting 'quit_probability' predictions and SHAP graphs will be completely flat and unreliable.",
                         }
                     )
+                else:
+                    # ── Dynamic Per-Feature Zero Signal ──
+                    # Run this only if the global signal is not already considered catastrophic
+                    signal_floor = max(0.01, 0.10 * max_corr)
+
+                    zero_signal_cols = []
+                    for col in valid_cols:
+                        if col in locked_columns:
+                            continue  # Exclude columns already flagged for redundancy
+                        if abs(corrs[col]) < signal_floor:
+                            zero_signal_cols.append(col)
+
+                    if zero_signal_cols:
+                        issues.append(
+                            {
+                                "severity": "info",
+                                "code": "specific_feature_zero_signal",
+                                "message": f"CONSEQUENCE: The columns {zero_signal_cols} have near-zero mathematical correlation with turnover (less than 10% of the strongest signal). They act as pure noise.",
+                                "suggestion": "SOLUTION: No action needed. The model may automatically discard these features during training.",
+                            }
+                        )
     except Exception:
         pass  # Silently fail the sanity check if Pandas correlation calculation fails
 

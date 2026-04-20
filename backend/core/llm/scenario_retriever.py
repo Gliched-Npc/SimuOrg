@@ -3,13 +3,16 @@ import os
 
 from pinecone import Pinecone
 
+from backend.config import settings
 from backend.core.llm.extended_scenarios import EXTENDED_SCENARIOS
 
 
 class ScenarioRetriever:
     def __init__(self):
-        self.api_key = os.getenv("PINECONE_API_KEY")
-        self.index_name = os.getenv("PINECONE_INDEX_NAME", "simuorg-scenarios")
+        self.api_key = settings.pinecone_api_key or os.getenv("PINECONE_API_KEY")
+        self.index_name = settings.pinecone_index_name or os.getenv(
+            "PINECONE_INDEX_NAME", "simuorg-scenarios"
+        )
 
         if self.api_key:
             self.pc = Pinecone(api_key=self.api_key)

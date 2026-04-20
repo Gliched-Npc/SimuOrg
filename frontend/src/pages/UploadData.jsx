@@ -810,10 +810,7 @@ export default function UploadData() {
                     {/* Confidence Badge */}
                     {(() => {
                       const score =
-                        mlMetrics.test_recall ??
-                        mlMetrics.cv_auc_mean ??
-                        mlMetrics.auc_roc ??
-                        null;
+                        mlMetrics.cv_auc_mean ?? mlMetrics.auc_roc ?? null;
                       const pct =
                         score != null ? Math.round(score * 100) : null;
                       const color =
@@ -824,10 +821,10 @@ export default function UploadData() {
                             : "#f87171";
                       const label =
                         pct >= 80
-                          ? "High Confidence"
+                          ? "High Reliability"
                           : pct >= 65
-                            ? "Moderate Confidence"
-                            : "Low Confidence";
+                            ? "Moderate Reliability"
+                            : "Low Reliability";
                       return pct != null ? (
                         <div style={{ textAlign: "right" }}>
                           <div
@@ -878,17 +875,6 @@ export default function UploadData() {
                           mlMetrics.cv_auc_mean >= 0.8
                             ? "#4ade80"
                             : mlMetrics.cv_auc_mean >= 0.65
-                              ? "#fbbf24"
-                              : "#f87171",
-                      },
-                      {
-                        label: "Flight-Risk Detection Rate",
-                        key: mlMetrics.test_recall,
-                        desc: "The percentage of true flight-risks successfully flagged by the AI on unseen data",
-                        color:
-                          mlMetrics.test_recall >= 0.7
-                            ? "#4ade80"
-                            : mlMetrics.test_recall >= 0.5
                               ? "#fbbf24"
                               : "#f87171",
                       },
