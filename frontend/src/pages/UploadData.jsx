@@ -272,8 +272,8 @@ export default function UploadData() {
               style={{
                 padding: "0.65rem 1.25rem",
                 borderRadius: 10,
-                background: "rgba(137,44,220,0.15)",
-                border: "1px solid #892CDC",
+                background: "rgba(0,173,181,0.15)",
+                border: "1px solid #00ADB5",
                 color: "#fff",
                 fontWeight: 600,
                 cursor: "pointer",
@@ -302,20 +302,20 @@ export default function UploadData() {
             style={{
               border: `2px dashed ${
                 isDragging
-                  ? "#892CDC"
+                  ? "#00ADB5"
                   : file
                     ? "rgba(74,222,128,0.4)"
-                    : "rgba(188,111,241,0.25)"
+                    : "rgba(51,201,207,0.25)"
               }`,
               borderRadius: "1rem",
               padding: "3rem 2rem",
               textAlign: "center",
               cursor: "pointer",
               background: isDragging
-                ? "rgba(137,44,220,0.1)"
+                ? "rgba(0,173,181,0.1)"
                 : file
                   ? "rgba(74,222,128,0.04)"
-                  : "rgba(82,5,123,0.06)",
+                  : "rgba(57,62,70,0.06)",
               transition: "all 0.25s",
             }}
           >
@@ -338,7 +338,7 @@ export default function UploadData() {
                 <div
                   style={{
                     fontSize: "0.8rem",
-                    color: "rgba(188,111,241,0.5)",
+                    color: "rgba(51,201,207,0.5)",
                     marginTop: 6,
                   }}
                 >
@@ -349,7 +349,7 @@ export default function UploadData() {
               <>
                 <Upload
                   size={40}
-                  color="rgba(188,111,241,0.4)"
+                  color="rgba(51,201,207,0.4)"
                   style={{ margin: "0 auto 1rem", display: "block" }}
                 />
                 <div
@@ -360,7 +360,7 @@ export default function UploadData() {
                 <div
                   style={{
                     fontSize: "0.85rem",
-                    color: "rgba(188,111,241,0.5)",
+                    color: "rgba(51,201,207,0.5)",
                     marginTop: 8,
                   }}
                 >
@@ -381,7 +381,7 @@ export default function UploadData() {
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "rgba(188,111,241,0.55)",
+                color: "rgba(51,201,207,0.55)",
                 fontSize: "0.78rem",
                 fontWeight: 600,
                 padding: 0,
@@ -406,9 +406,9 @@ export default function UploadData() {
                     style={{
                       padding: "0.2rem 0.6rem",
                       borderRadius: 6,
-                      background: "rgba(137,44,220,0.1)",
-                      border: "1px solid rgba(188,111,241,0.15)",
-                      color: "rgba(188,111,241,0.75)",
+                      background: "rgba(0,173,181,0.1)",
+                      border: "1px solid rgba(51,201,207,0.15)",
+                      color: "rgba(51,201,207,0.75)",
                       fontSize: "0.72rem",
                       fontFamily: "monospace",
                     }}
@@ -438,9 +438,9 @@ export default function UploadData() {
                 ? "not-allowed"
                 : "pointer",
             opacity: !file || trainDone ? 0.5 : 1,
-            background: "rgba(137,44,220,0.12)",
-            border: "1px solid rgba(188,111,241,0.25)",
-            color: "#BC6FF1",
+            background: "rgba(0,173,181,0.12)",
+            border: "1px solid rgba(51,201,207,0.25)",
+            color: "#33c9cf",
             transition: "all 0.18s",
           }}
         >
@@ -457,10 +457,10 @@ export default function UploadData() {
             fontSize: "0.9rem",
             cursor: !file || uploading || trainDone ? "not-allowed" : "pointer",
             opacity: !file || trainDone ? 0.5 : 1,
-            background: "linear-gradient(135deg, #892CDC, #52057B)",
-            border: "1px solid rgba(188,111,241,0.3)",
+            background: "linear-gradient(135deg, #00ADB5, #007a80)",
+            border: "1px solid rgba(51,201,207,0.3)",
             color: "#fff",
-            boxShadow: "0 4px 20px rgba(137,44,220,0.35)",
+            boxShadow: "0 4px 20px rgba(0,173,181,0.35)",
             transition: "all 0.18s",
           }}
         >
@@ -493,7 +493,7 @@ export default function UploadData() {
               <div
                 style={{
                   fontSize: "0.8rem",
-                  color: "rgba(188,111,241,0.5)",
+                  color: "rgba(51,201,207,0.5)",
                   marginTop: 3,
                 }}
               >
@@ -519,7 +519,7 @@ export default function UploadData() {
               <div
                 style={{
                   fontSize: "0.65rem",
-                  color: "rgba(188,111,241,0.4)",
+                  color: "rgba(51,201,207,0.4)",
                   marginTop: 2,
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
@@ -535,7 +535,7 @@ export default function UploadData() {
             style={{
               height: 6,
               borderRadius: 3,
-              background: "rgba(188,111,241,0.1)",
+              background: "rgba(51,201,207,0.1)",
               marginBottom: "1.25rem",
             }}
           >
@@ -544,7 +544,7 @@ export default function UploadData() {
                 height: "100%",
                 width: `${validation.trust_score ?? 0}%`,
                 borderRadius: 3,
-                background: `linear-gradient(90deg, #892CDC, ${
+                background: `linear-gradient(90deg, #00ADB5, ${
                   validation.trust_score >= 80 ? "#4ade80" : "#fbbf24"
                 })`,
                 transition: "width 0.8s ease",
@@ -654,19 +654,19 @@ export default function UploadData() {
                         trainStage > i
                           ? "rgba(74,222,128,0.15)"
                           : trainStage === i
-                            ? "rgba(137,44,220,0.2)"
-                            : "rgba(188,111,241,0.06)",
+                            ? "rgba(0,173,181,0.2)"
+                            : "rgba(51,201,207,0.06)",
                       border: `2px solid ${
                         trainStage > i
                           ? "#4ade80"
                           : trainStage === i
-                            ? "#892CDC"
-                            : "rgba(188,111,241,0.2)"
+                            ? "#00ADB5"
+                            : "rgba(51,201,207,0.2)"
                       }`,
                       transition: "all 0.4s",
                       boxShadow:
                         trainStage === i
-                          ? "0 0 12px rgba(137,44,220,0.4)"
+                          ? "0 0 12px rgba(0,173,181,0.4)"
                           : "none",
                     }}
                   >
@@ -679,8 +679,8 @@ export default function UploadData() {
                           fontWeight: 800,
                           color:
                             trainStage === i
-                              ? "#BC6FF1"
-                              : "rgba(188,111,241,0.3)",
+                              ? "#33c9cf"
+                              : "rgba(51,201,207,0.3)",
                         }}
                       >
                         {i + 1}
@@ -696,8 +696,8 @@ export default function UploadData() {
                         trainStage > i
                           ? "#4ade80"
                           : trainStage === i
-                            ? "#BC6FF1"
-                            : "rgba(188,111,241,0.35)",
+                            ? "#33c9cf"
+                            : "rgba(51,201,207,0.35)",
                     }}
                   >
                     {stage}
@@ -712,8 +712,8 @@ export default function UploadData() {
                       marginBottom: 26,
                       background:
                         trainStage > i
-                          ? "linear-gradient(90deg, #4ade80, #892CDC)"
-                          : "rgba(188,111,241,0.1)",
+                          ? "linear-gradient(90deg, #4ade80, #00ADB5)"
+                          : "rgba(51,201,207,0.1)",
                       transition: "background 0.6s",
                     }}
                   />
@@ -770,8 +770,8 @@ export default function UploadData() {
                 <div
                   style={{
                     borderRadius: 14,
-                    border: "1px solid rgba(188,111,241,0.2)",
-                    background: "rgba(82,5,123,0.12)",
+                    border: "1px solid rgba(51,201,207,0.2)",
+                    background: "rgba(57,62,70,0.12)",
                     overflow: "hidden",
                     marginBottom: "1.5rem",
                   }}
@@ -780,7 +780,7 @@ export default function UploadData() {
                   <div
                     style={{
                       padding: "1.25rem 1.5rem",
-                      borderBottom: "1px solid rgba(188,111,241,0.12)",
+                      borderBottom: "1px solid rgba(51,201,207,0.12)",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
@@ -799,7 +799,7 @@ export default function UploadData() {
                       <div
                         style={{
                           fontSize: "0.72rem",
-                          color: "rgba(188,111,241,0.5)",
+                          color: "rgba(51,201,207,0.5)",
                           marginTop: 2,
                         }}
                       >
@@ -910,7 +910,7 @@ export default function UploadData() {
                                 <span
                                   style={{
                                     fontSize: "0.72rem",
-                                    color: "rgba(188,111,241,0.45)",
+                                    color: "rgba(51,201,207,0.45)",
                                     marginLeft: 8,
                                   }}
                                 >
@@ -931,7 +931,7 @@ export default function UploadData() {
                               style={{
                                 height: 6,
                                 borderRadius: 3,
-                                background: "rgba(188,111,241,0.1)",
+                                background: "rgba(51,201,207,0.1)",
                               }}
                             >
                               <div
@@ -939,7 +939,7 @@ export default function UploadData() {
                                   height: "100%",
                                   borderRadius: 3,
                                   width: `${pct}%`,
-                                  background: `linear-gradient(90deg, #892CDC, ${color})`,
+                                  background: `linear-gradient(90deg, #00ADB5, ${color})`,
                                   transition: "width 1s ease",
                                 }}
                               />
@@ -959,18 +959,17 @@ export default function UploadData() {
                           background: "none",
                           border: "none",
                           padding: "0.4rem 0",
-                          color: "rgba(188,111,241,0.6)",
+                          color: "rgba(51,201,207,0.6)",
                           fontSize: "0.75rem",
                           fontWeight: 600,
                           cursor: "pointer",
                           transition: "color 0.2s",
                         }}
                         onMouseOver={(e) =>
-                          (e.currentTarget.style.color = "#892CDC")
+                          (e.currentTarget.style.color = "#00ADB5")
                         }
                         onMouseOut={(e) =>
-                          (e.currentTarget.style.color =
-                            "rgba(188,111,241,0.6)")
+                          (e.currentTarget.style.color = "rgba(51,201,207,0.6)")
                         }
                       >
                         {showAdvanced ? "Hide" : "Show"} Advanced Mathematical
@@ -989,7 +988,7 @@ export default function UploadData() {
                             padding: "1.25rem",
                             background: "rgba(0,0,0,0.2)",
                             borderRadius: 8,
-                            border: "1px dashed rgba(188,111,241,0.2)",
+                            border: "1px dashed rgba(51,201,207,0.2)",
                             display: "grid",
                             gridTemplateColumns: "1fr 1fr",
                             gap: "1rem",
@@ -1018,7 +1017,7 @@ export default function UploadData() {
                                   display: "flex",
                                   flexDirection: "column",
                                   gap: 4,
-                                  background: "rgba(188,111,241,0.05)",
+                                  background: "rgba(51,201,207,0.05)",
                                   padding: "10px",
                                   borderRadius: "6px",
                                 }}
@@ -1033,7 +1032,7 @@ export default function UploadData() {
                                   <span
                                     style={{
                                       fontSize: "0.75rem",
-                                      color: "rgba(188,111,241,0.8)",
+                                      color: "rgba(51,201,207,0.8)",
                                       fontWeight: 700,
                                     }}
                                   >
@@ -1044,7 +1043,7 @@ export default function UploadData() {
                                       fontSize: "0.75rem",
                                       color: "#fff",
                                       fontWeight: 700,
-                                      background: "rgba(188,111,241,0.15)",
+                                      background: "rgba(51,201,207,0.15)",
                                       padding: "2px 6px",
                                       borderRadius: 4,
                                     }}
@@ -1080,7 +1079,7 @@ export default function UploadData() {
                         <span
                           style={{
                             fontSize: "0.72rem",
-                            color: "rgba(188,111,241,0.5)",
+                            color: "rgba(51,201,207,0.5)",
                             fontWeight: 700,
                             textTransform: "uppercase",
                             letterSpacing: "0.08em",
@@ -1357,7 +1356,7 @@ export default function UploadData() {
                           style={{
                             fontSize: "0.72rem",
                             fontWeight: 700,
-                            color: "rgba(188,111,241,0.5)",
+                            color: "rgba(51,201,207,0.5)",
                             textTransform: "uppercase",
                             letterSpacing: "0.08em",
                             marginBottom: "0.75rem",
@@ -1392,10 +1391,10 @@ export default function UploadData() {
                                 .replace(/\b\w/g, (c) => c.toUpperCase());
                               const barColor =
                                 i === 0
-                                  ? "#BC6FF1"
+                                  ? "#33c9cf"
                                   : i === 1
-                                    ? "#892CDC"
-                                    : "rgba(188,111,241,0.5)";
+                                    ? "#00ADB5"
+                                    : "rgba(51,201,207,0.5)";
                               return (
                                 <div key={item.feature}>
                                   <div
@@ -1427,7 +1426,7 @@ export default function UploadData() {
                                     style={{
                                       height: 5,
                                       borderRadius: 3,
-                                      background: "rgba(188,111,241,0.08)",
+                                      background: "rgba(51,201,207,0.08)",
                                     }}
                                   >
                                     <div
@@ -1460,14 +1459,14 @@ export default function UploadData() {
                     gap: 10,
                     padding: "0.85rem 2.5rem",
                     borderRadius: 12,
-                    background: "linear-gradient(135deg, #892CDC, #52057B)",
-                    border: "1px solid rgba(188,111,241,0.4)",
+                    background: "linear-gradient(135deg, #00ADB5, #007a80)",
+                    border: "1px solid rgba(51,201,207,0.4)",
                     color: "#fff",
                     fontSize: "1.05rem",
                     fontWeight: 700,
                     cursor: "pointer",
                     transition: "all 0.2s ease",
-                    boxShadow: "0 8px 32px rgba(137,44,220,0.35)",
+                    boxShadow: "0 8px 32px rgba(0,173,181,0.35)",
                     animation: "pulse 2s infinite",
                   }}
                   onMouseOver={(e) =>
