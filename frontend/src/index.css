@@ -21,9 +21,9 @@
   --warning: #fbbf24;
   --danger: #f87171;
   --info: #38bdf8;
-  --text-1: #eeeeee;
-  --text-2: #00adb5;
-  --text-3: rgba(238, 238, 238, 0.45);
+  --text-1: #ffffff;
+  --text-2: #00e4ed;
+  --text-3: rgba(255, 255, 255, 0.55);
   --sidebar-w: 220px;
   --radius: 1.25rem;
   --radius-sm: 0.75rem;
@@ -92,8 +92,13 @@ body {
 
 /* ── Glass Card ────────────────────────────────────── */
 .glass-card {
-  background: rgba(57, 62, 70, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    180deg,
+    rgba(57, 62, 70, 0.95) 0%,
+    rgba(42, 47, 54, 0.95) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius);
   backdrop-filter: blur(50px);
   -webkit-backdrop-filter: blur(50px);

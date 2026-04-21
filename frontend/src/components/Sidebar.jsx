@@ -105,11 +105,9 @@ export default function Sidebar({ open, onClose }) {
               textDecoration: "none",
               fontSize: "0.875rem",
               fontWeight: isActive ? 600 : 500,
-              color: isActive ? "#ffffff" : "rgba(255,255,255,0.6)",
-              background: isActive ? "rgba(255,255,255,0.15)" : "transparent",
-              borderLeft: isActive
-                ? "3px solid #33c9cf"
-                : "3px solid transparent",
+              color: isActive ? "#ffffff" : "rgba(255,255,255,0.65)",
+              background: isActive ? "#00ADB5" : "transparent",
+              borderLeft: "none",
               transition: "all 0.18s ease",
             })}
             onMouseOver={(e) => {
