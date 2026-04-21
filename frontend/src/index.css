@@ -8,7 +8,7 @@
 :root {
   --bg-from: #222831;
   --bg-to: #1a2027;
-  --sidebar-glass: rgba(57, 62, 70, 0.65);
+  --sidebar-glass: rgba(57, 62, 70, 0.95);
   --sidebar-border: rgba(0, 173, 181, 0.22);
   --accent: #00adb5;
   --accent-light: #33c9cf;
@@ -92,7 +92,7 @@ body {
 
 /* ── Glass Card ────────────────────────────────────── */
 .glass-card {
-  background: rgba(57, 62, 70, 0.4);
+  background: rgba(57, 62, 70, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   backdrop-filter: blur(50px);
@@ -103,7 +103,7 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .glass-card:hover {
-  background: rgba(57, 62, 70, 0.65);
+  background: rgba(57, 62, 70, 0.95);
   border-color: rgba(0, 173, 181, 0.25);
   transform: translateY(-4px);
   box-shadow:

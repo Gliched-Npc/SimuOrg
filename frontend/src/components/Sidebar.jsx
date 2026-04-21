@@ -18,7 +18,7 @@ export default function Sidebar({ open, onClose }) {
         left: 0,
         width: "220px",
         height: "100vh",
-        background: "rgba(57, 62, 70, 0.65)",
+        background: "rgba(57, 62, 70, 0.95)",
         backdropFilter: "blur(80px)",
         WebkitBackdropFilter: "blur(80px)",
         borderRight: "1px solid rgba(51,201,207,0.25)",
