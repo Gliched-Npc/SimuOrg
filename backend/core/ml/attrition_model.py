@@ -251,14 +251,14 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     imbalance_ratio = round(negative / positive, 1)
 
     # Quick CV to decide imbalance strategy
-    capped_spw_quick = min(imbalance_ratio, 10.0)
+    capped_spw_quick = round(min(np.sqrt(imbalance_ratio), 10.0), 2)
     quick_model = XGBClassifier(
         n_estimators=50,
         max_depth=max_depth,
         learning_rate=0.05,
         scale_pos_weight=capped_spw_quick,
         random_state=42,
-        eval_metric="logloss",
+        eval_metric="auc",
         verbosity=0,
     )
     # For very small datasets, ensure class counts support the chosen number of folds.
@@ -273,7 +273,7 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     X_train_final, y_train_final = X_train, y_train
     # By using the full `imbalance_ratio` instead of dampening it, we force XGBoost
     # to penalize missed flight-risks heavily, naturally pushing recall up.
-    spw_main = round(min(imbalance_ratio, 10.0), 2)
+    spw_main = round(min(np.sqrt(imbalance_ratio), 10.0), 2)
     strategy = f"cost-sensitive (scale_pos_weight={spw_main})"
     print(f"  -> Imbalance ratio: {imbalance_ratio} Stays per Quitter | {strategy}")
 
@@ -282,23 +282,24 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     # but this distorts raw probability outputs (known XGBoost limitation).
     # CalibratedClassifierCV in Step 2 corrects the probabilities afterward.
     _early_stop_model = XGBClassifier(
-        n_estimators=200,
+        n_estimators=1000,
         max_depth=max_depth,
-        learning_rate=0.05,
+        learning_rate=0.02,
         subsample=0.8,
         colsample_bytree=0.8,
         min_child_weight=5,
         reg_alpha=1.0,
         reg_lambda=2.0,
         scale_pos_weight=spw_main,
+        max_delta_step=1,
         random_state=42,
-        eval_metric="logloss",
-        early_stopping_rounds=30,
+        eval_metric="auc",
+        early_stopping_rounds=50,
         verbosity=0,
     )
     _early_stop_model.fit(X_train_final, y_train_final, eval_set=[(X_val, y_val)], verbose=False)
     best_iter = _early_stop_model.best_iteration
-    print(f"  >> Best iteration: {best_iter} / 200")
+    print(f"  >> Best iteration: {best_iter} / 1000")
 
     # Step 2 — Refit without early_stopping_rounds using best_iter
     # CalibratedClassifierCV requires a model without early_stopping_rounds
@@ -306,15 +307,16 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     base_model = XGBClassifier(
         n_estimators=best_iter,
         max_depth=max_depth,
-        learning_rate=0.05,
+        learning_rate=0.02,
         subsample=0.8,
         colsample_bytree=0.8,
         min_child_weight=5,
         reg_alpha=1.0,
         reg_lambda=2.0,
         scale_pos_weight=spw_main,
+        max_delta_step=1,
         random_state=42,
-        eval_metric="logloss",
+        eval_metric="auc",
         verbosity=0,
     )
     base_model.fit(X_train_final, y_train_final)
@@ -381,14 +383,15 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     cv_model = XGBClassifier(
         n_estimators=best_iter,
         max_depth=max_depth,
-        learning_rate=0.05,
+        learning_rate=0.02,
         subsample=0.8,
         colsample_bytree=0.8,
         min_child_weight=5,  # kept in sync with main model
         reg_alpha=1.0,
         reg_lambda=2.0,
+        max_delta_step=1,
         random_state=42,
-        eval_metric="logloss",
+        eval_metric="auc",
         verbosity=0,
     )
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -409,8 +412,10 @@ def train_attrition_model(pre_clean_metrics: dict = None):
 
     # Dynamic Data Engineering Recommendations (Pre-Simulation Checks)
     if cv_mean >= 0.80:
-        rec = "Simulation results are highly reliable. Strong predictive signal found."
-    elif cv_mean >= 0.65:
+        rec = "Simulation results are highly reliable. Excellent predictive signal found."
+    elif cv_mean >= 0.70:
+        rec = "Simulation results are reliable. Good predictive signal found."
+    elif cv_mean >= 0.60:
         rec = "Simulation shows directional trends. Treat exact numbers with caution as the model has moderate predictive power."
     else:
         # Extract top feature names for XAI explanations
@@ -445,9 +450,15 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         "bonus_features": [f for f in OPTIONAL_FEATURES if f in FEATURES],
         "top_drivers": top_features,
         "signal_strength": (
-            "strong" if cv_mean >= 0.80 else "moderate" if cv_mean >= 0.65 else "weak"
+            "excellent"
+            if cv_mean >= 0.80
+            else "good"
+            if cv_mean >= 0.70
+            else "moderate"
+            if cv_mean >= 0.60
+            else "weak"
         ),
-        "simulation_reliable": bool(cv_mean >= 0.65),
+        "simulation_reliable": bool(cv_mean >= 0.70),
         "recommendation": rec,
     }
 

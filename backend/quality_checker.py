@@ -322,7 +322,7 @@ def check_data_quality(
                     if zero_signal_cols:
                         issues.append(
                             {
-                                "severity": "info",
+                                "severity": "warning",
                                 "code": "specific_feature_zero_signal",
                                 "message": f"CONSEQUENCE: The columns {zero_signal_cols} have near-zero mathematical correlation with turnover (less than 10% of the strongest signal). They act as pure noise.",
                                 "suggestion": "SOLUTION: No action needed. The model may automatically discard these features during training.",

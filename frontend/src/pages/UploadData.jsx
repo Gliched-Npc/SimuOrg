@@ -816,15 +816,19 @@ export default function UploadData() {
                       const color =
                         pct >= 80
                           ? "#4ade80"
-                          : pct >= 65
-                            ? "#fbbf24"
-                            : "#f87171";
+                          : pct >= 70
+                            ? "#38bdf8"
+                            : pct >= 60
+                              ? "#fbbf24"
+                              : "#f87171";
                       const label =
                         pct >= 80
                           ? "High Reliability"
-                          : pct >= 65
-                            ? "Moderate Reliability"
-                            : "Low Reliability";
+                          : pct >= 70
+                            ? "Good Reliability"
+                            : pct >= 60
+                              ? "Moderate Reliability"
+                              : "Low Reliability";
                       return pct != null ? (
                         <div style={{ textAlign: "right" }}>
                           <div
@@ -874,9 +878,11 @@ export default function UploadData() {
                         color:
                           mlMetrics.cv_auc_mean >= 0.8
                             ? "#4ade80"
-                            : mlMetrics.cv_auc_mean >= 0.65
-                              ? "#fbbf24"
-                              : "#f87171",
+                            : mlMetrics.cv_auc_mean >= 0.7
+                              ? "#38bdf8"
+                              : mlMetrics.cv_auc_mean >= 0.6
+                                ? "#fbbf24"
+                                : "#f87171",
                       },
                     ]
                       .filter((m) => m.key != null)
@@ -1089,23 +1095,29 @@ export default function UploadData() {
                             padding: "0.2rem 0.65rem",
                             borderRadius: 999,
                             background:
-                              mlMetrics.signal_strength === "strong"
+                              mlMetrics.signal_strength === "excellent"
                                 ? "rgba(74,222,128,0.12)"
-                                : mlMetrics.signal_strength === "moderate"
-                                  ? "rgba(251,191,36,0.12)"
-                                  : "rgba(248,113,113,0.12)",
+                                : mlMetrics.signal_strength === "good"
+                                  ? "rgba(56,189,248,0.12)"
+                                  : mlMetrics.signal_strength === "moderate"
+                                    ? "rgba(251,191,36,0.12)"
+                                    : "rgba(248,113,113,0.12)",
                             color:
-                              mlMetrics.signal_strength === "strong"
+                              mlMetrics.signal_strength === "excellent"
                                 ? "#4ade80"
-                                : mlMetrics.signal_strength === "moderate"
-                                  ? "#fbbf24"
-                                  : "#f87171",
+                                : mlMetrics.signal_strength === "good"
+                                  ? "#38bdf8"
+                                  : mlMetrics.signal_strength === "moderate"
+                                    ? "#fbbf24"
+                                    : "#f87171",
                             border: `1px solid ${
-                              mlMetrics.signal_strength === "strong"
+                              mlMetrics.signal_strength === "excellent"
                                 ? "rgba(74,222,128,0.25)"
-                                : mlMetrics.signal_strength === "moderate"
-                                  ? "rgba(251,191,36,0.25)"
-                                  : "rgba(248,113,113,0.25)"
+                                : mlMetrics.signal_strength === "good"
+                                  ? "rgba(56,189,248,0.25)"
+                                  : mlMetrics.signal_strength === "moderate"
+                                    ? "rgba(251,191,36,0.25)"
+                                    : "rgba(248,113,113,0.25)"
                             }`,
                             textTransform: "capitalize",
                           }}
@@ -1145,26 +1157,35 @@ export default function UploadData() {
                           options.push(optParts[1].trim());
                         }
 
-                        const isGood = mlMetrics.signal_strength === "strong";
+                        const isExcellent =
+                          mlMetrics.signal_strength === "excellent";
+                        const isGood = mlMetrics.signal_strength === "good";
                         const isModerate =
                           mlMetrics.signal_strength === "moderate";
 
-                        const colorTheme = isGood
+                        const colorTheme = isExcellent
                           ? "#4ade80"
-                          : isModerate
-                            ? "#fbbf24"
-                            : "#f87171";
-                        const bgTheme = isGood
+                          : isGood
+                            ? "#38bdf8"
+                            : isModerate
+                              ? "#fbbf24"
+                              : "#f87171";
+                        const bgTheme = isExcellent
                           ? "rgba(74,222,128,0.08)"
-                          : isModerate
-                            ? "rgba(251,191,36,0.08)"
-                            : "rgba(248,113,113,0.08)";
-                        const borderTheme = isGood
+                          : isGood
+                            ? "rgba(56,189,248,0.08)"
+                            : isModerate
+                              ? "rgba(251,191,36,0.08)"
+                              : "rgba(248,113,113,0.08)";
+                        const borderTheme = isExcellent
                           ? "rgba(74,222,128,0.2)"
-                          : isModerate
-                            ? "rgba(251,191,36,0.2)"
-                            : "rgba(248,113,113,0.2)";
-                        const Icon = isGood ? CheckCircle : AlertTriangle;
+                          : isGood
+                            ? "rgba(56,189,248,0.2)"
+                            : isModerate
+                              ? "rgba(251,191,36,0.2)"
+                              : "rgba(248,113,113,0.2)";
+                        const Icon =
+                          isExcellent || isGood ? CheckCircle : AlertTriangle;
 
                         return (
                           <div
