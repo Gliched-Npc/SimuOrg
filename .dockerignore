@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environment — never copy into Docker image
+venv/
+.venv/
+env/
+
+# Frontend — not needed in backend image
+frontend/
+
+# Dev + test artifacts
+.pytest_cache/
+.ruff_cache/
+*.log
+pylint_results.txt
+test_datasets/
+tmp_reset/
+
+# Git
+.git/
+.gitignore
+.pre-commit-config.yaml
+
+# Local env file — secrets come from Secret Manager in production
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

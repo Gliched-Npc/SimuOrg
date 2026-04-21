@@ -1,4 +1,3 @@
-﻿annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
 click==8.3.1
@@ -7,11 +6,8 @@ fastapi==0.109.0
 greenlet==3.3.1
 h11==0.16.0
 python-dotenv==1.2.1
-six==1.17.0.6.1
 SQLAlchemy==2.0.46
 sqlmodel==0.0.14
-starlette==0.52.12.9.11
-typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2025.3
 uvicorn[standard]==0.27.0
@@ -23,3 +19,24 @@ python-multipart==0.0.9
 pandas==2.2.0
 numpy==1.26.0
 shap
+joblib
+xgboost
+scikit-learn
+networkx
+openai>=1.10.0
+groq
+
+# Testing & Quality Assurance
+pytest
+pytest-cov
+httpx
+
+# Observability
+sentry-sdk[fastapi]
+loguru
+
+# Coding Standards
+ruff
+pre-commit
+
+pinecone[grpc]

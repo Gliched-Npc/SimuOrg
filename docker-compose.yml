@@ -10,5 +10,7 @@ services:
       POSTGRES_DB: simuorg_copy_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+
 volumes:
   postgres_data:

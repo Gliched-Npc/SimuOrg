@@ -1,1 +1,4 @@
-/* App-specific overrides — keep minimal, Tailwind handles most styling */
+/* App.css — reset any vite defaults */
+#root {
+  min-height: 100vh;
+}

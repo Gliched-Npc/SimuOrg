@@ -1,0 +1,23 @@
+[project]
+name = "simuorg"
+version = "0.1.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused variables/imports)
+    "I",   # isort (automatically group and alphabetically sort imports)
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade (enforce modern Python syntax)
+]
+ignore = [
+    "E501", # ignore strict line length on comments/strings because it's annoying
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
