@@ -225,7 +225,8 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
     employees = []
     skipped = 0
 
-    for _, row in df.iterrows():
+    records = df.to_dict("records")
+    for row in records:
         try:
             mgr_id = int(row["ManagerID"])
             if mgr_id == 0:

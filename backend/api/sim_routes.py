@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.core.simulation.policies import POLICIES
@@ -49,7 +49,7 @@ def get_test_data():
 
 
 @router.post("/run")
-async def run_simulation_endpoint(request: SimulationRequest):
+async def run_simulation_endpoint(request: SimulationRequest, background_tasks: BackgroundTasks):
     import json
 
     from sqlmodel import Session, select
@@ -116,7 +116,8 @@ async def run_simulation_endpoint(request: SimulationRequest):
         )
         session.commit()
 
-    run_simulation_task.delay(
+    background_tasks.add_task(
+        run_simulation_task,
         job_id,
         request.policy_name,
         request.runs,
@@ -156,7 +157,7 @@ def get_simulation_status(job_id: str):
 
 
 @router.post("/compare")
-async def compare_policies(request: CompareRequest):
+async def compare_policies(request: CompareRequest, background_tasks: BackgroundTasks):
     from sqlmodel import Session
 
     from backend.db.database import engine
@@ -196,7 +197,8 @@ async def compare_policies(request: CompareRequest):
         )
         session.commit()
 
-    compare_simulations_task.delay(
+    background_tasks.add_task(
+        compare_simulations_task,
         job_id,
         request.policy_a,
         request.policy_b,

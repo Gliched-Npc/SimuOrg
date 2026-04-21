@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -79,7 +79,7 @@ class OrchestrateRequest(BaseModel):
 
 
 @router.post("/orchestrate")
-def orchestrate_endpoint(request: OrchestrateRequest):
+def orchestrate_endpoint(request: OrchestrateRequest, background_tasks: BackgroundTasks):
     """
     Kicks off the full 3-agent orchestration pipeline as an async Celery task.
     Returns a job_id immediately — the frontend must poll /orchestrate/status/{job_id}.
@@ -110,7 +110,7 @@ def orchestrate_endpoint(request: OrchestrateRequest):
         session.refresh(job)
         job_id = job.job_id
 
-    orchestrate_task.delay(job_id, request.user_text)
+    background_tasks.add_task(orchestrate_task, job_id, request.user_text)
 
     return {"job_id": job_id, "status": "queued"}
 

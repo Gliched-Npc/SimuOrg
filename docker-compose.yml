@@ -11,21 +11,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: simuorg_rabbitmq
-    ports:
-      - "5672:5672"    # Celery broker
-      - "15672:15672"  # Management UI (http://localhost:15672)
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-
-  redis:
-    image: redis:7-alpine
-    container_name: simuorg_redis
-    ports:
-      - "6379:6379"
 
 volumes:
   postgres_data:

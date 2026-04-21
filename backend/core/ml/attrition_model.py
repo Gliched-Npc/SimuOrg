@@ -394,8 +394,16 @@ def train_attrition_model(pre_clean_metrics: dict = None):
         eval_metric="auc",
         verbosity=0,
     )
+    # Subsample if dataset is too large to prevent OOM on Cloud Run
+    X_cv, y_cv = X, y
+    if len(X_cv) > 50000:
+        print(
+            f"  >> Dataset >50k rows ({len(X_cv)}): Subsampling to 50k for CV to prevent memory issues..."
+        )
+        _, X_cv, _, y_cv = train_test_split(X, y, test_size=50000, random_state=42, stratify=y)
+
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(cv_model, X, y, cv=cv, scoring="roc_auc")
+    cv_scores = cross_val_score(cv_model, X_cv, y_cv, cv=cv, scoring="roc_auc")
     print(f"  AUC per fold: {[round(s, 4) for s in cv_scores]}")
     print(f"  Mean AUC:     {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 

@@ -151,7 +151,7 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
         session.add(job)
         session.commit()
 
-    run_training_task.delay(job_id, quality_report)
+    background_tasks.add_task(run_training_task, job_id, quality_report)
 
     return {
         "status": "ingested",

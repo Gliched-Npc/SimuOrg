@@ -14,7 +14,6 @@ from backend.services.simulation_service import (
     run_simulation_job,
     run_training_job,
 )
-from backend.workers.celery_app import celery_app
 
 
 def _update_job(
@@ -39,9 +38,7 @@ def _update_job(
         session.commit()
 
 
-@celery_app.task(bind=True, name="tasks.run_simulation")
 def run_simulation_task(
-    self,
     job_id: str,
     policy_name: str,
     runs: int,
@@ -79,8 +76,7 @@ def run_simulation_task(
         raise
 
 
-@celery_app.task(bind=True, name="tasks.run_training")
-def run_training_task(self, job_id: str, quality_report: dict = None):
+def run_training_task(job_id: str, quality_report: dict = None):
     _update_job(job_id, "running")
     try:
         result = run_training_job(quality_report)
@@ -91,9 +87,7 @@ def run_training_task(self, job_id: str, quality_report: dict = None):
         raise
 
 
-@celery_app.task(bind=True, name="tasks.compare_simulations")
 def compare_simulations_task(
-    self,
     job_id: str,
     policy_a: str,
     policy_b: str,
@@ -111,8 +105,7 @@ def compare_simulations_task(
         raise
 
 
-@celery_app.task(bind=True, name="tasks.orchestrate")
-def orchestrate_task(self, job_id: str, user_text: str):
+def orchestrate_task(job_id: str, user_text: str):
     """
     Runs the full 3-agent orchestration pipeline in a Celery worker:
       Agent 1 — Intent routing + parameter extraction
