@@ -36,6 +36,38 @@ def _run_migrations():
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS executive_summary TEXT",
         # 2026-04-05: added policy_log_id to link job to LLM generation log
         "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS policy_log_id TEXT",
+        # 2026-04-23: Data Isolation columns
+        "ALTER TABLE employee ADD COLUMN IF NOT EXISTS session_id VARCHAR DEFAULT 'global'",
+        "ALTER TABLE simulation_job ADD COLUMN IF NOT EXISTS session_id VARCHAR DEFAULT 'global'",
+        "ALTER TABLE orchestrate_job ADD COLUMN IF NOT EXISTS session_id VARCHAR DEFAULT 'global'",
+        "ALTER TABLE policy_generation_log ADD COLUMN IF NOT EXISTS session_id VARCHAR DEFAULT 'global'",
+        "ALTER TABLE ml_artifact ADD COLUMN IF NOT EXISTS session_id VARCHAR DEFAULT 'global'",
+        # Drop old PK and add composite PK for ml_artifact
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'ml_artifact_pkey'
+                AND pg_get_constraintdef(oid) NOT LIKE '%session_id%'
+            ) THEN
+                ALTER TABLE ml_artifact DROP CONSTRAINT ml_artifact_pkey;
+                ALTER TABLE ml_artifact ADD PRIMARY KEY (name, session_id);
+            END IF;
+        END $$;
+        """,
+        # 2026-04-23: Drop sole employee_id PK and add composite (employee_id, session_id)
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'employee_pkey'
+                AND pg_get_constraintdef(oid) NOT LIKE '%session_id%'
+            ) THEN
+                ALTER TABLE employee DROP CONSTRAINT employee_pkey;
+                ALTER TABLE employee ADD PRIMARY KEY (employee_id, session_id);
+            END IF;
+        END $$;
+        """,
     ]
     with engine.connect() as conn:
         for stmt in migrations:

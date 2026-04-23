@@ -125,15 +125,15 @@ async def upload_dataset(
 
             session.exec(
                 text("DELETE FROM simulation_job WHERE session_id = :sid"),
-                {"sid": session_id},
+                params={"sid": session_id},
             )
             session.exec(
                 text("DELETE FROM orchestrate_job WHERE session_id = :sid"),
-                {"sid": session_id},
+                params={"sid": session_id},
             )
             session.exec(
                 text("DELETE FROM policy_generation_log WHERE session_id = :sid"),
-                {"sid": session_id},
+                params={"sid": session_id},
             )
             session.commit()
     except Exception as e:

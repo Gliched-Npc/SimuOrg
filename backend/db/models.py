@@ -18,7 +18,7 @@ class Employee(SQLModel, table=True):
     job_level: int
     manager_id: int | None = Field(default=None)
     simulation_id: str = Field(default="master", index=True)
-    session_id: str = Field(default="global", index=True)
+    session_id: str = Field(default="global", primary_key=True)
 
     # Demographics
     age: int

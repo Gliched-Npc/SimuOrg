@@ -268,7 +268,9 @@ def ingest_from_dataframe(df: pd.DataFrame, session_id: str = "global") -> dict:
             continue
 
     with Session(engine) as session:
-        session.exec(text("DELETE FROM employee WHERE session_id = :sid"), {"sid": session_id})
+        session.exec(
+            text("DELETE FROM employee WHERE session_id = :sid"), params={"sid": session_id}
+        )
         session.add_all(employees)
         session.commit()
 
