@@ -63,9 +63,11 @@ FEATURES = BASE_FEATURES.copy()
 LABEL_ENCODERS: dict = {}
 
 
-def load_data_from_db():
+def load_data_from_db(session_id: str = "global"):
     with Session(engine) as session:
-        employees = session.exec(select(Employee).order_by(Employee.employee_id)).all()
+        employees = session.exec(
+            select(Employee).where(Employee.session_id == session_id).order_by(Employee.employee_id)
+        ).all()
     df = pd.DataFrame([e.model_dump() for e in employees])
     return df
 
@@ -176,12 +178,12 @@ def tune_threshold(model, X_val, y_val) -> float:
     return best_threshold
 
 
-def train_attrition_model(pre_clean_metrics: dict = None):
+def train_attrition_model(pre_clean_metrics: dict = None, session_id: str = "global"):
     global FEATURES
 
     print("=== Loading data from database...")
 
-    df = load_data_from_db()
+    df = load_data_from_db(session_id=session_id)
     print("Rows loaded from DB:", len(df))
 
     df = df.drop(columns=["employee_id", "simulation_id"], errors="ignore")
@@ -497,8 +499,8 @@ def train_attrition_model(pre_clean_metrics: dict = None):
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact
 
-    save_artifact("quit_model", model_payload, "pkl")
-    save_artifact("quality", quality_report, "json")
+    save_artifact("quit_model", model_payload, "pkl", session_id=session_id)
+    save_artifact("quality", quality_report, "json", session_id=session_id)
 
     return quality_report
 

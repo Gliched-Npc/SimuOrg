@@ -42,7 +42,7 @@ def isolate_calibration_file(monkeypatch):
         "calib_attrition_std": 0.01,
     }
 
-    def fake_load_artifact(key):
+    def fake_load_artifact(key, **kwargs):
         if key == "calibration":
             return fake_cal
         if key == "quit_model":

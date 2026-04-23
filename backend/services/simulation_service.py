@@ -14,6 +14,7 @@ def run_simulation_job(
     duration_months: int | None = None,
     seed: int = 42,
     policy_config: dict | None = None,
+    session_id: str = "global",
 ) -> dict:
     """
     Run a Monte Carlo simulation for a given policy.
@@ -29,7 +30,9 @@ def run_simulation_job(
     if duration_months is not None:
         config.duration_months = duration_months
 
-    return run_monte_carlo(config, runs=runs, policy_name=policy_name, seed=seed)
+    return run_monte_carlo(
+        config, runs=runs, policy_name=policy_name, seed=seed, session_id=session_id
+    )
 
 
 def compare_simulation_jobs(
@@ -38,6 +41,7 @@ def compare_simulation_jobs(
     runs: int = 10,
     duration_months: int | None = None,
     seed: int = 42,
+    session_id: str = "global",
 ) -> dict:
     """
     Run two policies and return combined comparison result.
@@ -55,13 +59,17 @@ def compare_simulation_jobs(
     if duration_months is not None:
         config_b.duration_months = duration_months
 
-    result_a = run_monte_carlo(config_a, runs=runs, policy_name=policy_a, seed=seed)
-    result_b = run_monte_carlo(config_b, runs=runs, policy_name=policy_b, seed=seed)
+    result_a = run_monte_carlo(
+        config_a, runs=runs, policy_name=policy_a, seed=seed, session_id=session_id
+    )
+    result_b = run_monte_carlo(
+        config_b, runs=runs, policy_name=policy_b, seed=seed, session_id=session_id
+    )
 
     return {"policy_a": result_a, "policy_b": result_b}
 
 
-def run_training_job(quality_report: dict = None) -> dict:
+def run_training_job(quality_report: dict = None, session_id: str = "global") -> dict:
     """
     Run full ML training pipeline.
     Returns calibration result.
@@ -81,10 +89,10 @@ def run_training_job(quality_report: dict = None) -> dict:
         else None
     )
 
-    model_quality = train_attrition_model(pre_clean_metrics=pre_clean)
-    train_burnout_estimator()
+    model_quality = train_attrition_model(pre_clean_metrics=pre_clean, session_id=session_id)
+    train_burnout_estimator(session_id=session_id)
     _agent_module._quit_model_cache = None  # bust lazy-load cache
-    cal = calibrate()
+    cal = calibrate(session_id=session_id)
 
     return {
         "model": {

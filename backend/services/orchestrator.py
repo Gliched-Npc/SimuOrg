@@ -13,13 +13,13 @@ from backend.services.simulation_service import run_simulation_job
 load_dotenv()
 
 
-def get_calib_data():
+def get_calib_data(session_id: str = "global"):
     from backend.storage.storage import load_artifact
 
-    return load_artifact("calibration") or {}
+    return load_artifact("calibration", session_id=session_id) or {}
 
 
-def orchestrate_user_request(user_text: str) -> dict:
+def orchestrate_user_request(user_text: str, session_id: str = "global") -> dict:
     """
     The 3-Agent Orchestration Pipeline (Backend Phase)
 
@@ -75,7 +75,7 @@ def orchestrate_user_request(user_text: str) -> dict:
         }
 
     # ── AGENT 1: Policy Parameter Extraction ─────────────────────────────────
-    calib_data = get_calib_data()
+    calib_data = get_calib_data(session_id=session_id)
     context = build_context(calib_data)
 
     print("[Orchestrator] Intent is simulate. Extracting parameters...")
@@ -99,7 +99,9 @@ def orchestrate_user_request(user_text: str) -> dict:
     # ── AGENT 2: Simulation Engine ───────────────────────────────────────────
     print("[Orchestrator] Generating Monte Carlo simulation...")
     runs = 10
-    sim_result = run_simulation_job(policy_name="custom", runs=runs, policy_config=config.__dict__)
+    sim_result = run_simulation_job(
+        policy_name="custom", runs=runs, policy_config=config.__dict__, session_id=session_id
+    )
 
     # inject the config into sim_result for the reasoning chain to consume
     sim_result["config"] = config.__dict__

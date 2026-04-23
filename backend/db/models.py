@@ -18,6 +18,7 @@ class Employee(SQLModel, table=True):
     job_level: int
     manager_id: int | None = Field(default=None)
     simulation_id: str = Field(default="master", index=True)
+    session_id: str = Field(default="global", index=True)
 
     # Demographics
     age: int
@@ -70,6 +71,7 @@ class SimulationJob(SQLModel, table=True):
     policy_config: str | None = Field(default=None)  # JSON of exact SimulationConfig used
     policy_log_id: str | None = Field(default=None)  # Link to PolicyGenerationLog (if custom)
     executive_summary: str | None = Field(default=None)  # CEO reasoning output (future)
+    session_id: str = Field(default="global", index=True)
 
 
 class MLArtifact(SQLModel, table=True):
@@ -78,6 +80,7 @@ class MLArtifact(SQLModel, table=True):
     __tablename__ = "ml_artifact"
 
     name: str = Field(primary_key=True)  # "quit_model" | "burnout" | "calibration" | "quality"
+    session_id: str = Field(default="global", primary_key=True)
     artifact_type: str = Field(default="json")  # "pkl" | "json"
     data: str = Field()  # base64 str for pkl, raw JSON str for json
     updated_at: datetime = Field(default_factory=get_utc_now)
@@ -93,6 +96,7 @@ class PolicyGenerationLog(SQLModel, table=True):
     generated_config: str = Field()  # JSON of SimulationConfig
     justification: str = Field(default="{}")  # JSON of LLM justification
     created_at: datetime = Field(default_factory=get_utc_now)
+    session_id: str = Field(default="global", index=True)
 
 
 class OrchestrateJob(SQLModel, table=True):
@@ -107,3 +111,4 @@ class OrchestrateJob(SQLModel, table=True):
     error: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=get_utc_now)
     updated_at: datetime = Field(default_factory=get_utc_now)
+    session_id: str = Field(default="global", index=True)

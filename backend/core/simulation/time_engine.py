@@ -3,7 +3,7 @@
 import numpy as np
 from sqlmodel import Session, select
 
-from backend.core.simulation.agent import EmployeeAgent, _quit_model
+from backend.core.simulation.agent import EmployeeAgent
 from backend.core.simulation.behavior_engine import apply_attrition_shockwave, update_agent_state
 from backend.core.simulation.org_graph import OrgGraph, build_org_graph
 from backend.core.simulation.policies import SimulationConfig, get_policy
@@ -13,38 +13,43 @@ from backend.db.models import Employee
 # Lazy-loaded calibration cache — same pattern as behavior_engine.py.
 # This guarantees that after a retrain + recalibrate, the very next simulation
 # picks up fresh values without a server restart.
-_engine_calibration_cache = None
+_engine_calibration_cache = {}
 
 
-def clear_engine_calibration_cache():
+def clear_engine_calibration_cache(session_id: str = None):
     """Call after calibrate() so the next run_simulation reads fresh values."""
     global _engine_calibration_cache
-    _engine_calibration_cache = None
+    if session_id is None:
+        _engine_calibration_cache = {}
+    else:
+        _engine_calibration_cache.pop(session_id, None)
 
 
-def _get_calibration():
+def _get_calibration(session_id: str = "global"):
     """Lazy-load calibration.json. Re-reads after clear_engine_calibration_cache()."""
     global _engine_calibration_cache
-    if _engine_calibration_cache is None:
+    if session_id not in _engine_calibration_cache:
         from backend.storage.storage import load_artifact
 
-        data = load_artifact("calibration")
+        data = load_artifact("calibration", session_id=session_id)
         if data:
-            _engine_calibration_cache = data
+            _engine_calibration_cache[session_id] = data
         else:
-            _engine_calibration_cache = {
+            _engine_calibration_cache[session_id] = {
                 "prob_scale": 1.0,
                 "stress_amplification": 2.0,
                 "monthly_natural_rate": 0.0145,
                 "stress_threshold": 0.5,
                 "new_hire_monthly_prob": 0.029,
             }
-    return _engine_calibration_cache
+    return _engine_calibration_cache[session_id]
 
 
-def load_agents_from_db() -> list[EmployeeAgent]:
+def load_agents_from_db(session_id: str = "global") -> list[EmployeeAgent]:
     with Session(engine) as session:
-        all_employees = session.exec(select(Employee).order_by(Employee.employee_id)).all()
+        all_employees = session.exec(
+            select(Employee).where(Employee.session_id == session_id).order_by(Employee.employee_id)
+        ).all()
 
     # Load all employees regardless of Attrition label.
     # Attrition="Yes" is past information used to train the ML model.
@@ -64,6 +69,7 @@ def run_simulation(
     seed: int = 42,
     prob_scale_override: float = None,
     stress_amplification_override: float = None,
+    session_id: str = "global",
 ) -> dict:
     """
     Run one simulation pass.
@@ -79,7 +85,7 @@ def run_simulation(
     rng = np.random.default_rng(seed)
 
     # Read fresh calibration on every call (lazy-loaded, invalidated after retrain)
-    cal = _get_calibration()
+    cal = _get_calibration(session_id=session_id)
     STRESS_THRESHOLD = cal.get("stress_threshold", 0.5)
     NATURAL_MONTHLY_RATE = cal.get("monthly_natural_rate", 0.0145)
 
@@ -101,7 +107,7 @@ def run_simulation(
 
     print(f"=== Starting simulation - Policy: {policy_name.upper()}")
     if agents is None:
-        agents = load_agents_from_db()
+        agents = load_agents_from_db(session_id=session_id)
     if G is None:
         G = build_org_graph(agents)
 
@@ -183,13 +189,15 @@ def run_simulation(
             import pandas as pd
 
             from backend.core.ml.attrition_model import engineer_features
-            from backend.core.simulation.agent import _quit_encoders, _quit_features
+            from backend.core.simulation.agent import _quit_encoders, _quit_features, _quit_model
 
             # Batch feature engineering & prediction (~50x speedup)
             raw_data = [a.get_raw_quit_dict() for a in candidate_agents]
             df = pd.DataFrame(raw_data)
-            df = engineer_features(df, encoders=_quit_encoders())
-            yearly_probs = _quit_model().predict_proba(df[_quit_features()])[:, 1]
+            df = engineer_features(df, encoders=_quit_encoders(session_id))
+            yearly_probs = _quit_model(session_id).predict_proba(df[_quit_features(session_id)])[
+                :, 1
+            ]
 
             for i, agent in enumerate(candidate_agents):
                 yearly_prob = yearly_probs[i]

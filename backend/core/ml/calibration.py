@@ -11,18 +11,20 @@ from backend.db.database import engine
 from backend.db.models import Employee
 
 
-def calibrate(stress_amplification_override=None):
+def calibrate(stress_amplification_override=None, session_id: str = "global"):
     print("=== Running simulation calibration...")
 
     with Session(engine) as session:
-        employees = session.exec(select(Employee).order_by(Employee.employee_id)).all()
+        employees = session.exec(
+            select(Employee).where(Employee.session_id == session_id).order_by(Employee.employee_id)
+        ).all()
 
     if not employees:
         raise ValueError("No employees found in database. Run upload/ingest first.")
 
     from backend.storage.storage import load_artifact
 
-    _saved = load_artifact("quit_model")
+    _saved = load_artifact("quit_model", session_id=session_id)
     if not _saved:
         raise ValueError(
             "Quit probability model not found in DB. "
@@ -273,7 +275,7 @@ def calibrate(stress_amplification_override=None):
 
     from backend.storage.storage import save_artifact
 
-    save_artifact("calibration", calibration, "json")
+    save_artifact("calibration", calibration, "json", session_id=session_id)
 
     print("+++ Initial calibration saved.")
     print("=== Running empirical calibration...")
@@ -300,7 +302,7 @@ def calibrate(stress_amplification_override=None):
     calib_config = SimulationConfig(shock_factor=0.0, stress_gain_rate=0.75, duration_months=12)
 
     # Load agents once, and build graph once. Deepcopy per run.
-    calib_agents_base = load_agents_from_db()
+    calib_agents_base = load_agents_from_db(session_id=session_id)
     calib_G_base = build_org_graph(calib_agents_base)
 
     def _run_full_sim_rate(ps, seed=42):
@@ -322,6 +324,7 @@ def calibrate(stress_amplification_override=None):
             policy_name="calibration_run",
             seed=seed,
             prob_scale_override=ps,
+            session_id=session_id,
         )
         return result["summary"].get("period_attrition_pct", 0.0) / 100.0
 
@@ -407,7 +410,7 @@ def calibrate(stress_amplification_override=None):
     # Persist to DB so calibration survives server restarts
     from backend.storage.storage import save_artifact
 
-    save_artifact("calibration", calibration, "json")
+    save_artifact("calibration", calibration, "json", session_id=session_id)
 
     # Clear ALL engine caches so the very next simulation uses fresh values
     clear_calibration_cache()

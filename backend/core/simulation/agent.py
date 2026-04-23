@@ -9,16 +9,16 @@ from backend.core.ml.productivity_decay import productivity_decay
 
 # Lazy-loaded — model is loaded on first use, not at import time.
 # This allows the server to start even if no model has been trained yet.
-_quit_model_cache = None
+_quit_model_cache = {}
 
 
-def _get_quit_model():
+def _get_quit_model(session_id: str = "global"):
     """Load (and cache) the quit model on first call."""
     global _quit_model_cache
-    if _quit_model_cache is None:
+    if session_id not in _quit_model_cache:
         from backend.storage.storage import load_artifact
 
-        _saved = load_artifact("quit_model")
+        _saved = load_artifact("quit_model", session_id=session_id)
         if not _saved:
             raise FileNotFoundError(
                 "Quit model not found in DB. "
@@ -47,37 +47,40 @@ def _get_quit_model():
         else:
             loaded_model = base_model  # backwards-compatible
 
-        _quit_model_cache = {
+        _quit_model_cache[session_id] = {
             "model": loaded_model,
             "threshold": _saved["threshold"],
             "features": _saved["features"],
             "label_encoders": _saved.get("label_encoders", {}),
         }
-    return _quit_model_cache
+    return _quit_model_cache[session_id]
 
 
 # Convenience aliases — resolved lazily on first simulation call
-def _quit_model():
-    return _get_quit_model()["model"]
+def _quit_model(session_id: str = "global"):
+    return _get_quit_model(session_id)["model"]
 
 
-def _quit_threshold():
-    return _get_quit_model()["threshold"]
+def _quit_threshold(session_id: str = "global"):
+    return _get_quit_model(session_id)["threshold"]
 
 
-def _quit_features():
-    return _get_quit_model()["features"]
+def _quit_features(session_id: str = "global"):
+    return _get_quit_model(session_id)["features"]
 
 
-def _quit_encoders():
-    return _get_quit_model()["label_encoders"]
+def _quit_encoders(session_id: str = "global"):
+    return _get_quit_model(session_id)["label_encoders"]
 
 
-def clear_quit_model_cache():
+def clear_quit_model_cache(session_id: str = None):
     """Reset the cached quit model so the next call to _get_quit_model() re-reads from disk.
     Must be called after retraining/recalibration to prevent stale predictions."""
     global _quit_model_cache
-    _quit_model_cache = None
+    if session_id is None:
+        _quit_model_cache = {}
+    else:
+        _quit_model_cache.pop(session_id, None)
 
 
 class EmployeeAgent:
@@ -155,15 +158,15 @@ class EmployeeAgent:
             "job_role": self.job_role,
         }
 
-    def get_quit_features(self):
+    def get_quit_features(self, session_id: str = "global"):
         """
         Build feature dict matching exact features the model was trained on.
         Lazy-loads the model on first call via _quit_features().
         """
         raw = self.get_raw_quit_dict()
         df = pd.DataFrame([raw])
-        df = engineer_features(df, encoders=_quit_encoders())
-        return df[_quit_features()]
+        df = engineer_features(df, encoders=_quit_encoders(session_id))
+        return df[_quit_features(session_id)]
 
     def update_productivity(self, workload_multiplier: float = 1.0):
         self.productivity = productivity_decay(

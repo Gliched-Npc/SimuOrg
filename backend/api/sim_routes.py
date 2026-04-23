@@ -2,9 +2,10 @@
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.api.deps import get_session_id
 from backend.core.simulation.policies import POLICIES
 
 router = APIRouter(prefix="/api/sim", tags=["Simulation"])
@@ -32,7 +33,7 @@ def list_policies():
 
 
 @router.get("/test-data")
-def get_test_data():
+def get_test_data(session_id: str = Depends(get_session_id)):
     """
     Return all employees with simulation_id='master' as a JSON array.
     Used by the Dashboard and Analytics pages for workforce visualisations.
@@ -43,13 +44,22 @@ def get_test_data():
     from backend.db.models import Employee
 
     with Session(engine) as session:
-        employees = session.exec(select(Employee).where(Employee.simulation_id == "master")).all()
+        employees = session.exec(
+            select(Employee).where(
+                Employee.simulation_id == "master",
+                Employee.session_id == session_id,
+            )
+        ).all()
 
     return [e.model_dump() for e in employees]
 
 
 @router.post("/run")
-async def run_simulation_endpoint(request: SimulationRequest, background_tasks: BackgroundTasks):
+async def run_simulation_endpoint(
+    request: SimulationRequest,
+    background_tasks: BackgroundTasks,
+    session_id: str = Depends(get_session_id),
+):
     import json
 
     from sqlmodel import Session, select
@@ -59,10 +69,10 @@ async def run_simulation_endpoint(request: SimulationRequest, background_tasks: 
     from backend.storage.storage import load_artifact
     from backend.workers.tasks import run_simulation_task
 
-    if not load_artifact("quit_model"):
+    if not load_artifact("quit_model", session_id):
         raise HTTPException(status_code=400, detail="No trained model found.")
 
-    quality = load_artifact("quality")
+    quality = load_artifact("quality", session_id)
     if quality and not quality.get("simulation_reliable", True):
         raise HTTPException(
             status_code=403,
@@ -74,7 +84,7 @@ async def run_simulation_endpoint(request: SimulationRequest, background_tasks: 
         )
 
     with Session(engine) as session:
-        if not session.exec(select(Employee)).all():
+        if not session.exec(select(Employee).where(Employee.session_id == session_id)).all():
             raise HTTPException(status_code=400, detail="No employee data in database.")
 
     if request.policy_name != "custom" and request.policy_name not in POLICIES:
@@ -112,6 +122,7 @@ async def run_simulation_endpoint(request: SimulationRequest, background_tasks: 
                 if resolved_policy_config
                 else None,
                 policy_log_id=request.policy_log_id,
+                session_id=session_id,
             )
         )
         session.commit()
@@ -124,6 +135,7 @@ async def run_simulation_endpoint(request: SimulationRequest, background_tasks: 
         request.duration_months,
         request.seed,
         resolved_policy_config,
+        session_id,
     )
 
     return {
@@ -157,7 +169,11 @@ def get_simulation_status(job_id: str):
 
 
 @router.post("/compare")
-async def compare_policies(request: CompareRequest, background_tasks: BackgroundTasks):
+async def compare_policies(
+    request: CompareRequest,
+    background_tasks: BackgroundTasks,
+    session_id: str = Depends(get_session_id),
+):
     from sqlmodel import Session
 
     from backend.db.database import engine
@@ -171,7 +187,7 @@ async def compare_policies(request: CompareRequest, background_tasks: Background
 
     from backend.storage.storage import load_artifact
 
-    quality = load_artifact("quality")
+    quality = load_artifact("quality", session_id)
     if quality and not quality.get("simulation_reliable", True):
         raise HTTPException(
             status_code=403,
@@ -193,6 +209,7 @@ async def compare_policies(request: CompareRequest, background_tasks: Background
                 runs=request.runs,
                 duration_months=request.duration_months,
                 seed=request.seed,
+                session_id=session_id,
             )
         )
         session.commit()
@@ -205,6 +222,7 @@ async def compare_policies(request: CompareRequest, background_tasks: Background
         request.runs,
         request.duration_months,
         request.seed,
+        session_id,
     )
 
     return {

@@ -10,7 +10,11 @@ from backend.core.simulation.time_engine import load_agents_from_db, run_simulat
 
 
 def run_monte_carlo(
-    config: SimulationConfig, runs: int = 50, policy_name: str = "custom", seed: int = 42
+    config: SimulationConfig,
+    runs: int = 50,
+    policy_name: str = "custom",
+    seed: int = 42,
+    session_id: str = "global",
 ) -> dict:
     """
     Run simulation multiple times and aggregate results.
@@ -19,7 +23,7 @@ def run_monte_carlo(
     print(f"=== Running Monte Carlo: {runs} simulations - Policy: {policy_name.upper()}")
 
     # Load once — used as the immutable base for ALL runs
-    base_agents = load_agents_from_db()
+    base_agents = load_agents_from_db(session_id=session_id)
 
     # Build org graph ONCE from base agents, then deepcopy it per run.
     # Previously deepcopy(base_agents) produced new object ids, breaking the
@@ -135,7 +139,7 @@ def run_monte_carlo(
         from backend.storage.storage import load_artifact
 
         baseline_annual_attrition = None
-        cal = load_artifact("calibration")
+        cal = load_artifact("calibration", session_id=session_id)
         if cal:
             try:
                 baseline_annual_attrition = float(cal.get("annual_attrition_rate", 0.0)) * 100.0

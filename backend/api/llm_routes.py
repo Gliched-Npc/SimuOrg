@@ -3,10 +3,11 @@
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session
 
+from backend.api.deps import get_session_id
 from backend.core.llm.context_builder import build_context
 from backend.core.llm.intent_parser import build_config_from_llm_output, translate_policy
 from backend.db.database import engine
@@ -23,7 +24,10 @@ class PolicyRequest(BaseModel):
 
 
 @router.post("/generate")
-def generate_policy(request: PolicyRequest):
+def generate_policy(
+    request: PolicyRequest,
+    session_id: str = Depends(get_session_id),
+):
     """
     Translates a natural language policy description into a validated SimulationConfig.
     Logs the generation to the DB and returns a log_id the frontend must pass
@@ -33,7 +37,7 @@ def generate_policy(request: PolicyRequest):
         # 1. Load calibration data — strictly from DB (no local fallback)
         from backend.storage.storage import load_artifact
 
-        calib_data = load_artifact("calibration") or {}
+        calib_data = load_artifact("calibration", session_id=session_id) or {}
 
         # 2. Build context out of safe calibration anchors
         context = build_context(calib_data)
@@ -52,6 +56,7 @@ def generate_policy(request: PolicyRequest):
                 user_prompt=request.description,
                 generated_config=json.dumps(config.__dict__),
                 justification=json.dumps(justification),
+                session_id=session_id,
             )
             session.add(log)
             session.commit()
@@ -79,7 +84,11 @@ class OrchestrateRequest(BaseModel):
 
 
 @router.post("/orchestrate")
-def orchestrate_endpoint(request: OrchestrateRequest, background_tasks: BackgroundTasks):
+def orchestrate_endpoint(
+    request: OrchestrateRequest,
+    background_tasks: BackgroundTasks,
+    session_id: str = Depends(get_session_id),
+):
     """
     Kicks off the full 3-agent orchestration pipeline as an async Celery task.
     Returns a job_id immediately — the frontend must poll /orchestrate/status/{job_id}.
@@ -92,7 +101,7 @@ def orchestrate_endpoint(request: OrchestrateRequest, background_tasks: Backgrou
     from backend.storage.storage import load_artifact
     from backend.workers.tasks import orchestrate_task
 
-    quality = load_artifact("quality")
+    quality = load_artifact("quality", session_id=session_id)
     if quality and not quality.get("simulation_reliable", True):
         raise HTTPException(
             status_code=403,
@@ -104,13 +113,16 @@ def orchestrate_endpoint(request: OrchestrateRequest, background_tasks: Backgrou
         )
 
     with Session(engine) as session:
-        job = OrchestrateJob(user_text=request.user_text)
+        job = OrchestrateJob(
+            user_text=request.user_text,
+            session_id=session_id,
+        )
         session.add(job)
         session.commit()
         session.refresh(job)
         job_id = job.job_id
 
-    background_tasks.add_task(orchestrate_task, job_id, request.user_text)
+    background_tasks.add_task(orchestrate_task, job_id, request.user_text, session_id)
 
     return {"job_id": job_id, "status": "queued"}
 

@@ -24,16 +24,16 @@ def burnout_threshold(job_level: int, total_working_years: float) -> float:
     return round(min(threshold, 0.85), 3)
 
 
-def load_data_from_db():
+def load_data_from_db(session_id: str = "global"):
     with Session(engine) as session:
-        employees = session.exec(select(Employee)).all()
+        employees = session.exec(select(Employee).where(Employee.session_id == session_id)).all()
     df = pd.DataFrame([e.model_dump() for e in employees])
     return df
 
 
-def train_burnout_estimator():
+def train_burnout_estimator(session_id: str = "global"):
     print("=== Loading data from database...")
-    load_data_from_db()
+    load_data_from_db(session_id=session_id)
 
     print("\n=== Sample Thresholds:")
     print(f"  Junior L1 (1yr)    : {burnout_threshold(1, 1)}")
@@ -46,7 +46,7 @@ def train_burnout_estimator():
     # Persist to DB so artifacts survive server restarts
     from backend.storage.storage import save_artifact
 
-    save_artifact("burnout", burnout_threshold, "pkl")
+    save_artifact("burnout", burnout_threshold, "pkl", session_id=session_id)
 
 
 if __name__ == "__main__":

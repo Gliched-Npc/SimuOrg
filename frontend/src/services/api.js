@@ -6,12 +6,35 @@ const API = axios.create({
     : "http://127.0.0.1:8000/api",
 });
 
-// Attach JWT token to every request if it exists
+// Generate or retrieve session ID
+function getSessionId() {
+  let sessionId = localStorage.getItem("simuorg_session_id");
+  if (!sessionId) {
+    try {
+      sessionId = crypto.randomUUID();
+    } catch (e) {
+      // Fallback for older browsers
+      sessionId = "10000000-1000-4000-8000-100000000000".replace(
+        /[018]/g,
+        (c) =>
+          (
+            c ^
+            (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
+          ).toString(16),
+      );
+    }
+    localStorage.setItem("simuorg_session_id", sessionId);
+  }
+  return sessionId;
+}
+
+// Attach JWT token and Session ID to every request
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  config.headers["X-Session-ID"] = getSessionId();
   return config;
 });
 

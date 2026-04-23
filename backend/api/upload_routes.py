@@ -5,9 +5,10 @@ import json
 import uuid
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session
 
+from backend.api.deps import get_session_id
 from backend.db.database import engine, init_db
 from backend.db.models import SimulationJob
 from backend.schema import REQUIRED_COLUMNS, normalize_dataframe
@@ -38,7 +39,10 @@ def _read_and_normalize(file_bytes: bytes) -> tuple[pd.DataFrame, bool]:
 
 
 @router.post("/validate")
-async def validate_dataset(file: UploadFile = File(...)):
+async def validate_dataset(
+    file: UploadFile = File(...),
+    session_id: str = Depends(get_session_id),
+):
     """
     Run quality checks on the uploaded CSV WITHOUT ingesting into the database.
     Returns issues with severity tiers and a cleaning report so the client
@@ -81,7 +85,11 @@ async def validate_dataset(file: UploadFile = File(...)):
 
 
 @router.post("/dataset")
-async def upload_dataset(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+async def upload_dataset(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
+    session_id: str = Depends(get_session_id),
+):
     # 1. Validate file
     if not file or not file.filename:
         raise HTTPException(
@@ -111,14 +119,21 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
     # 4. Ingest into DB (fast — no ML yet)
     init_db()
     try:
-        result = ingest_from_dataframe(df)
+        result = ingest_from_dataframe(df, session_id=session_id)
         with Session(engine) as session:
             from sqlalchemy import text
 
             session.exec(
-                text(
-                    "TRUNCATE TABLE simulation_job, orchestrate_job, policy_generation_log CASCADE"
-                )
+                text("DELETE FROM simulation_job WHERE session_id = :sid"),
+                {"sid": session_id},
+            )
+            session.exec(
+                text("DELETE FROM orchestrate_job WHERE session_id = :sid"),
+                {"sid": session_id},
+            )
+            session.exec(
+                text("DELETE FROM policy_generation_log WHERE session_id = :sid"),
+                {"sid": session_id},
             )
             session.commit()
     except Exception as e:
@@ -137,6 +152,7 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         },
         "json",
+        session_id=session_id,
     )
 
     # 5. Kick off training + calibration
@@ -147,11 +163,12 @@ async def upload_dataset(file: UploadFile = File(...), background_tasks: Backgro
             job_type="training",
             status="queued",
             data_issues=json.dumps(quality_report["issues"]),
+            session_id=session_id,
         )
         session.add(job)
         session.commit()
 
-    background_tasks.add_task(run_training_task, job_id, quality_report)
+    background_tasks.add_task(run_training_task, job_id, quality_report, session_id)
 
     return {
         "status": "ingested",
@@ -187,10 +204,10 @@ def get_training_status(job_id: str):
 
 
 @router.get("/metadata")
-def get_dataset_metadata():
+def get_dataset_metadata(session_id: str = Depends(get_session_id)):
     from backend.storage.storage import load_artifact
 
-    metadata = load_artifact("dataset_metadata")
+    metadata = load_artifact("dataset_metadata", session_id=session_id)
     if not metadata:
         raise HTTPException(status_code=404, detail="No dataset uploaded.")
     return metadata

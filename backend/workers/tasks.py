@@ -45,11 +45,17 @@ def run_simulation_task(
     duration_months: int | None,
     seed: int = 42,
     policy_config: dict | None = None,
+    session_id: str = "global",
 ):
     _update_job(job_id, "running")
     try:
         result = run_simulation_job(
-            policy_name, runs, duration_months, seed, policy_config=policy_config
+            policy_name,
+            runs,
+            duration_months,
+            seed,
+            policy_config=policy_config,
+            session_id=session_id,
         )
 
         # ────────────────────────────────────────────────────────────
@@ -76,10 +82,10 @@ def run_simulation_task(
         raise
 
 
-def run_training_task(job_id: str, quality_report: dict = None):
+def run_training_task(job_id: str, quality_report: dict = None, session_id: str = "global"):
     _update_job(job_id, "running")
     try:
-        result = run_training_job(quality_report)
+        result = run_training_job(quality_report, session_id=session_id)
         _update_job(job_id, "completed", result=result)
         return result
     except Exception as e:
@@ -94,10 +100,13 @@ def compare_simulations_task(
     runs: int,
     duration_months: int | None,
     seed: int = 42,
+    session_id: str = "global",
 ):
     _update_job(job_id, "running")
     try:
-        result = compare_simulation_jobs(policy_a, policy_b, runs, duration_months, seed)
+        result = compare_simulation_jobs(
+            policy_a, policy_b, runs, duration_months, seed, session_id=session_id
+        )
         _update_job(job_id, "completed", result=result)
         return result
     except Exception as e:
@@ -105,7 +114,7 @@ def compare_simulations_task(
         raise
 
 
-def orchestrate_task(job_id: str, user_text: str):
+def orchestrate_task(job_id: str, user_text: str, session_id: str = "global"):
     """
     Runs the full 3-agent orchestration pipeline in a Celery worker:
       Agent 1 — Intent routing + parameter extraction
@@ -132,7 +141,7 @@ def orchestrate_task(job_id: str, user_text: str):
 
     _set("running")
     try:
-        result = orchestrate_user_request(user_text)
+        result = orchestrate_user_request(user_text, session_id=session_id)
         _set("completed", result=result)
         return result
     except Exception as e:

@@ -221,7 +221,7 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int, int, dict, lis
     return df, duplicates_removed, junk_removed, null_rates, cleaning_audit
 
 
-def ingest_from_dataframe(df: pd.DataFrame) -> dict:
+def ingest_from_dataframe(df: pd.DataFrame, session_id: str = "global") -> dict:
     employees = []
     skipped = 0
 
@@ -259,6 +259,7 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
                 percent_salary_hike=int(row.get("PercentSalaryHike", 0)),
                 years_in_current_role=int(row.get("YearsInCurrentRole", 0)),
                 overtime=int(row.get("overtime", 0)),
+                session_id=session_id,
             )
             employees.append(emp)
         except Exception as e:
@@ -267,9 +268,9 @@ def ingest_from_dataframe(df: pd.DataFrame) -> dict:
             continue
 
     with Session(engine) as session:
-        session.exec(text("TRUNCATE TABLE employee RESTART IDENTITY CASCADE"))
+        session.exec(text("DELETE FROM employee WHERE session_id = :sid"), {"sid": session_id})
         session.add_all(employees)
-        session.commit()  # atomic: truncate + insert succeed or fail together
+        session.commit()
 
     print(f"[done] {len(employees)} employees ingested. Skipped: {skipped}")
     return {"ingested": len(employees), "skipped": skipped}
