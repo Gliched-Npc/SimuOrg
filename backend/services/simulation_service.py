@@ -91,7 +91,9 @@ def run_training_job(quality_report: dict = None, session_id: str = "global") ->
 
     model_quality = train_attrition_model(pre_clean_metrics=pre_clean, session_id=session_id)
     train_burnout_estimator(session_id=session_id)
-    _agent_module._quit_model_cache = None  # bust lazy-load cache
+    _agent_module.clear_quit_model_cache(
+        session_id=session_id
+    )  # bust lazy-load cache for this session
     cal = calibrate(session_id=session_id)
 
     return {
