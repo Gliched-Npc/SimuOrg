@@ -186,7 +186,7 @@ def train_attrition_model(pre_clean_metrics: dict = None, session_id: str = "glo
     df = load_data_from_db(session_id=session_id)
     print("Rows loaded from DB:", len(df))
 
-    df = df.drop(columns=["employee_id", "simulation_id"], errors="ignore")
+    df = df.drop(columns=["employee_id", "simulation_id", "session_id"], errors="ignore")
     print("After column drop:", len(df))
 
     # df = df.drop_duplicates()
