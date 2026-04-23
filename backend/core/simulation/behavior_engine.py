@@ -5,20 +5,20 @@ import math
 from backend.core.simulation.agent import EmployeeAgent
 from backend.core.simulation.org_graph import OrgGraph
 
-_calibration_cache = None
+_calibration_cache = {}
 
 
-def _load_calibration():
+def _load_calibration(session_id: str = "global"):
     """Lazy-load calibration — re-reads after retrain without server restart."""
     global _calibration_cache
-    if _calibration_cache is None:
+    if session_id not in _calibration_cache:
         from backend.storage.storage import load_artifact
 
-        data = load_artifact("calibration")
+        data = load_artifact("calibration", session_id=session_id)
         if data:
-            _calibration_cache = data
+            _calibration_cache[session_id] = data
         else:
-            _calibration_cache = {
+            _calibration_cache[session_id] = {
                 "stress_gain_rate": 0.0132,
                 "behavior_stress_gain_rate": 0.0264,
                 "recovery_rate": 0.0104,
@@ -39,18 +39,21 @@ def _load_calibration():
                 "wlb_recovery_rate": 0.1,
                 "burnout_productivity_penalty": 0.97,
             }
-    return _calibration_cache
+    return _calibration_cache[session_id]
 
 
-def clear_calibration_cache():
+def clear_calibration_cache(session_id: str = None):
     """Invalidate the lazy cache so the next simulation re-reads calibration.json."""
     global _calibration_cache
-    _calibration_cache = None
+    if session_id is None:
+        _calibration_cache = {}
+    else:
+        _calibration_cache.pop(session_id, None)
 
 
 # All constants resolved lazily via _load_calibration() on first call
-def _c(key, default):
-    return _load_calibration().get(key, default)
+def _c(key, default, session_id: str = "global"):
+    return _load_calibration(session_id=session_id).get(key, default)
 
 
 def compute_neighbor_influence(agent: EmployeeAgent, G: OrgGraph) -> tuple[float, float]:
@@ -81,6 +84,7 @@ def update_agent_state(
     stress_gain_rate: float = 1.0,
     bonus: float = 0.0,
     wlb_boost: float = 0.0,
+    session_id: str = "global",
 ):
     """
     Update one agent's behavioral state for one timestep.
@@ -90,22 +94,24 @@ def update_agent_state(
         return
 
     # Resolve constants lazily each call (cached after first load)
-    STRESS_GAIN_RATE = _c("behavior_stress_gain_rate", _c("stress_gain_rate", 0.0132))
-    RECOVERY_RATE = _c("recovery_rate", 0.0104)
-    NEIGHBOR_STRESS_WEIGHT = _c("neighbor_stress_weight", 0.01)
-    FATIGUE_STRESS_WEIGHT = _c("fatigue_stress_weight", 0.005)
-    COMM_QUALITY_CAP = _c("comm_quality_cap", 5.0)
-    COMM_QUALITY_BENEFIT = _c("comm_quality_benefit", 0.001)
-    FATIGUE_GAIN_RATE = _c("fatigue_gain_rate", 0.03)
-    FATIGUE_RECOVERY_RATE = _c("fatigue_recovery_rate", 0.01)
-    FATIGUE_STRESS_TRIGGER = _c("fatigue_stress_trigger", 0.5)
-    MOTIVATION_RECOVERY_RATE = _c("motivation_recovery_rate", 0.01)
-    MOTIVATION_THRESHOLD = _c("motivation_threshold", 0.15)
-    WLB_STRESS_BUFFER = _c("wlb_stress_buffer", 0.2)
-    WLB_STRESS_SENSITIVITY = _c("wlb_stress_sensitivity", 1.5)
-    WLB_DROP_RATE = _c("wlb_drop_rate", 0.15)
-    WLB_RECOVERY_RATE = _c("wlb_recovery_rate", 0.1)
-    BURNOUT_PROD_PENALTY = _c("burnout_productivity_penalty", 0.97)
+    STRESS_GAIN_RATE = _c(
+        "behavior_stress_gain_rate", _c("stress_gain_rate", 0.0132, session_id), session_id
+    )
+    RECOVERY_RATE = _c("recovery_rate", 0.0104, session_id)
+    NEIGHBOR_STRESS_WEIGHT = _c("neighbor_stress_weight", 0.01, session_id)
+    FATIGUE_STRESS_WEIGHT = _c("fatigue_stress_weight", 0.005, session_id)
+    COMM_QUALITY_CAP = _c("comm_quality_cap", 5.0, session_id)
+    COMM_QUALITY_BENEFIT = _c("comm_quality_benefit", 0.001, session_id)
+    FATIGUE_GAIN_RATE = _c("fatigue_gain_rate", 0.03, session_id)
+    FATIGUE_RECOVERY_RATE = _c("fatigue_recovery_rate", 0.01, session_id)
+    FATIGUE_STRESS_TRIGGER = _c("fatigue_stress_trigger", 0.5, session_id)
+    MOTIVATION_RECOVERY_RATE = _c("motivation_recovery_rate", 0.01, session_id)
+    MOTIVATION_THRESHOLD = _c("motivation_threshold", 0.15, session_id)
+    WLB_STRESS_BUFFER = _c("wlb_stress_buffer", 0.2, session_id)
+    WLB_STRESS_SENSITIVITY = _c("wlb_stress_sensitivity", 1.5, session_id)
+    WLB_DROP_RATE = _c("wlb_drop_rate", 0.15, session_id)
+    WLB_RECOVERY_RATE = _c("wlb_recovery_rate", 0.1, session_id)
+    BURNOUT_PROD_PENALTY = _c("burnout_productivity_penalty", 0.97, session_id)
 
     # Get neighbor influence
     neighbor_stress, comm_quality = compute_neighbor_influence(agent, G)
@@ -219,10 +225,12 @@ def update_agent_state(
         agent.productivity *= burnout_penalty
 
 
-def apply_attrition_shockwave(quitting_agent: EmployeeAgent, G: OrgGraph, shock_factor: float):
+def apply_attrition_shockwave(
+    quitting_agent: EmployeeAgent, G: OrgGraph, shock_factor: float, session_id: str = "global"
+):
     """When an agent quits, their neighbors feel the impact."""
-    shockwave_stress = _c("shockwave_stress_factor", 0.3)
-    shockwave_loyalty = _c("shockwave_loyalty_factor", 0.1)
+    shockwave_stress = _c("shockwave_stress_factor", 0.3, session_id)
+    shockwave_loyalty = _c("shockwave_loyalty_factor", 0.1, session_id)
     for neighbor_id in list(G.neighbors(quitting_agent.employee_id)):
         edge_data = G[quitting_agent.employee_id][neighbor_id]
         weight = edge_data.get("weight", 0.5)

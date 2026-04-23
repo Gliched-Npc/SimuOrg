@@ -170,6 +170,7 @@ def run_simulation(
                     stress_gain_rate=config.stress_gain_rate,
                     bonus=config.bonus,
                     wlb_boost=config.wlb_boost,
+                    session_id=session_id,
                 )
 
         # Layoffs
@@ -229,7 +230,7 @@ def run_simulation(
         # Process departures
         departed_agents = list(dict.fromkeys(layoff_agents + quitting_agents))
         for agent in departed_agents:
-            apply_attrition_shockwave(agent, G, config.shock_factor)
+            apply_attrition_shockwave(agent, G, config.shock_factor, session_id=session_id)
             agent.is_active = False
             # G.remove_node() intentionally omitted: removing nodes permanently
             # breaks contagion paths. Inactive agents are skipped by behavior_engine.

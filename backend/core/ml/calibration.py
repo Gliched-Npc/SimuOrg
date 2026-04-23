@@ -416,10 +416,10 @@ def calibrate(stress_amplification_override=None, session_id: str = "global"):
     clear_calibration_cache()
     from backend.core.simulation.time_engine import clear_engine_calibration_cache
 
-    clear_engine_calibration_cache()
+    clear_engine_calibration_cache(session_id=session_id)
     from backend.core.simulation.agent import clear_quit_model_cache
 
-    clear_quit_model_cache()
+    clear_quit_model_cache(session_id=session_id)
 
     return calibration
 
