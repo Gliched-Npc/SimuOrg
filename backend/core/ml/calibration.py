@@ -328,7 +328,7 @@ def calibrate(stress_amplification_override=None, session_id: str = "global"):
         )
         return result["summary"].get("period_attrition_pct", 0.0) / 100.0
 
-    def _stable_rate(ps, seeds=(42, 99)):
+    def _stable_rate(ps, seeds=(42,)):
         """Average rate across multiple seeds for noise-resistant measurement."""
         rates = [_run_full_sim_rate(ps, seed=s) for s in seeds]
         return float(np.mean(rates))
@@ -341,9 +341,9 @@ def calibrate(stress_amplification_override=None, session_id: str = "global"):
         f"target={annual_attrition_rate:.4f}  gap={gap:+.4f}"
     )
 
-    # ── Binary search (up to 8 passes) ────────────────────────────────────────
+    # ── Binary search (up to 6 passes) ────────────────────────────────────────
     CONVERGENCE_TOL = 0.005
-    MAX_PASSES = 8
+    MAX_PASSES = 6
     emp_lo, emp_hi = 0.05, 10.0
     converged = False
 
