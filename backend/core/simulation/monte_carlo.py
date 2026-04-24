@@ -47,7 +47,12 @@ def run_monte_carlo(
                 G_copy.nodes[node_id]["agent"] = id_to_copy[node_id]
 
         result = run_simulation(
-            config, agents=agents_copy, G=G_copy, policy_name=policy_name, seed=seed + i
+            config,
+            agents=agents_copy,
+            G=G_copy,
+            policy_name=policy_name,
+            seed=seed + i,
+            session_id=session_id,
         )
         all_logs.append(result["logs"])
         all_summaries.append(result.get("summary", {}))
