@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload,
@@ -57,6 +57,8 @@ export default function UploadData() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
+  const pollRef = useRef(null); // holds the status poll setInterval
+  const stageRef = useRef(null); // holds the stage animation setInterval
 
   // ── File Handling ────────────────────────────────────────
   const handleFile = (f) => {
@@ -98,13 +100,55 @@ export default function UploadData() {
     }
   };
 
+  // ── Cleanup helper — always clears both intervals safely ────────────────
+  const clearPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (stageRef.current) {
+      clearInterval(stageRef.current);
+      stageRef.current = null;
+    }
+  }, []);
+
   // ── Session Restore ─────────────────────────────────────
   useEffect(() => {
     const lastJob = localStorage.getItem("simuorg_training_job_id");
     if (lastJob) {
-      setUploading(true);
-      setTrainStage(1);
-      resumePoll(lastJob);
+      // First, check the current status immediately (don't assume it's still running)
+      getTrainingStatus(lastJob)
+        .then(({ data: status }) => {
+          if (status.status === "completed") {
+            // Already done — skip animation, go straight to done state
+            localStorage.removeItem("simuorg_training_job_id");
+            setTrainStage(4);
+            setTrainDone(true);
+            setUploading(false);
+            Promise.allSettled([
+              getFeatureImportance(),
+              getModelMetrics(),
+            ]).then(([shapRes, metricsRes]) => {
+              if (shapRes.status === "fulfilled")
+                setShapData(shapRes.value.data.buckets);
+              if (metricsRes.status === "fulfilled")
+                setMlMetrics(metricsRes.value.data);
+            });
+          } else if (status.status === "failed") {
+            localStorage.removeItem("simuorg_training_job_id");
+            setError(status.error || "Training failed");
+            setUploading(false);
+          } else {
+            // Still genuinely running — resume the progress animation
+            setUploading(true);
+            setTrainStage(1);
+            resumePoll(lastJob);
+          }
+        })
+        .catch(() => {
+          // If we can't reach the backend, just clear and let user re-upload
+          localStorage.removeItem("simuorg_training_job_id");
+        });
     } else {
       // Check if dataset already exists
       Promise.allSettled([
@@ -124,21 +168,25 @@ export default function UploadData() {
         }
       });
     }
-  }, []);
+
+    // Cleanup: clear any running intervals when navigating away from this page
+    return () => clearPolling();
+  }, [clearPolling]);
 
   const resumePoll = (job_id) => {
+    clearPolling(); // safety: ensure no stale intervals from a previous call
+
     let stageTimer = 1;
-    const stageInterval = setInterval(() => {
+    stageRef.current = setInterval(() => {
       stageTimer = Math.min(stageTimer + 1, 3);
       setTrainStage(stageTimer);
     }, 3000);
 
-    const poll = setInterval(async () => {
+    pollRef.current = setInterval(async () => {
       try {
         const { data: status } = await getTrainingStatus(job_id);
         if (status.status === "completed") {
-          clearInterval(poll);
-          clearInterval(stageInterval);
+          clearPolling();
           setTrainStage(4);
           setTrainDone(true);
           setUploading(false);
@@ -153,8 +201,7 @@ export default function UploadData() {
             },
           );
         } else if (status.status === "failed") {
-          clearInterval(poll);
-          clearInterval(stageInterval);
+          clearPolling();
           setError(status.error || "Training failed");
           setUploading(false);
           localStorage.removeItem("simuorg_training_job_id");
