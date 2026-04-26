@@ -147,7 +147,7 @@ async def run_simulation_endpoint(
 
 
 @router.get("/status/{job_id}")
-def get_simulation_status(job_id: str):
+def get_simulation_status(job_id: str, session_id: str = Depends(get_session_id)):
     import json
 
     from sqlmodel import Session
@@ -159,6 +159,9 @@ def get_simulation_status(job_id: str):
         job = session.get(SimulationJob, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+    # Bug #3 fix: prevent cross-user result leakage via guessed job UUIDs
+    if job.session_id != session_id:
+        raise HTTPException(status_code=403, detail="Access denied.")
     result = json.loads(job.result) if job.result else None
     return {
         "job_id": job_id,

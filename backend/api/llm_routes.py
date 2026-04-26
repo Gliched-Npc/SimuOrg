@@ -128,7 +128,7 @@ def orchestrate_endpoint(
 
 
 @router.get("/orchestrate/status/{job_id}")
-def orchestrate_status(job_id: str):
+def orchestrate_status(job_id: str, session_id: str = Depends(get_session_id)):
     """
     Poll this until status == 'completed' or 'failed'.
     On completion, 'result' contains the full simulation + briefing payload.
@@ -138,6 +138,10 @@ def orchestrate_status(job_id: str):
 
     if job is None:
         raise HTTPException(status_code=404, detail=f"Orchestration job {job_id} not found.")
+
+    # Bug #3 fix: prevent cross-user result leakage via guessed job UUIDs
+    if job.session_id != session_id:
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     response = {
         "job_id": job.job_id,
@@ -158,11 +162,12 @@ def orchestrate_status(job_id: str):
 
 
 @router.get("/policy/{log_id}")
-def get_policy_log(log_id: str):
+def get_policy_log(log_id: str, session_id: str = Depends(get_session_id)):
     """Retrieve a previously generated policy config by its log_id."""
     with Session(engine) as session:
         log = session.get(PolicyGenerationLog, log_id)
-    if log is None:
+    # Bug #4 fix: only return log if it belongs to the caller's session
+    if log is None or log.session_id != session_id:
         raise HTTPException(status_code=404, detail=f"Policy log {log_id} not found.")
     return {
         "log_id": log.log_id,

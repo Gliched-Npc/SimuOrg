@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { Zap, AlertCircle, RefreshCw } from "lucide-react";
 import StatusStepper from "../components/StatusStepper";
@@ -19,6 +19,7 @@ export default function Simulate() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const textareaRef = useRef(null);
+  const pollRef = useRef(null);
   const location = useLocation();
 
   // ── Session Restore ─────────────────────────────────────
@@ -51,30 +52,44 @@ export default function Simulate() {
             setError(data.error || "Orchestration failed");
           }
         })
-        .catch(() => {}); // silently ignore stale job_id
+        .catch((err) => {
+          // Bug #1 fix: clear stale job_id so this 404 doesn't fire on every page load
+          if (err?.response?.status === 404) {
+            localStorage.removeItem("simuorg_last_job_id");
+            localStorage.removeItem("simuorg_last_prompt");
+          }
+        });
     }
   }, [location.state]);
 
-  const resumePoll = (jobId) => {
-    const poll = setInterval(async () => {
+  // Bug #6 fix: clean up any live poll interval when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const resumePoll = useCallback((jobId) => {
+    // Bug #6 fix: store interval ID in a ref so it can be cleared on unmount
+    pollRef.current = setInterval(async () => {
       try {
         const { data } = await getOrchestrateStatus(jobId);
         setStatus(data.status);
         if (data.status === "completed") {
-          clearInterval(poll);
+          clearInterval(pollRef.current);
           setResult(data.result);
           setLoading(false);
         } else if (data.status === "failed") {
-          clearInterval(poll);
+          clearInterval(pollRef.current);
           setError(data.error || "Orchestration failed");
           setLoading(false);
         }
       } catch {
-        clearInterval(poll);
+        clearInterval(pollRef.current);
         setLoading(false);
       }
     }, 2500);
-  };
+  }, []);
 
   // ── Run Handler ─────────────────────────────────────────
   const handleRun = async () => {
