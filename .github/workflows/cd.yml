@@ -8,9 +8,9 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
-  REPO_NAME: simuorg-repo
-  IMAGE_NAME: simuorg-backend
-  SERVICE_NAME: simuorg-backend-test
+  REPO_NAME: simuorg-images
+  IMAGE_NAME: backend
+  SERVICE_NAME: simuorg-backend
   DATABASE_URL: sqlite:///./test.db
   ENVIRONMENT: test
 
