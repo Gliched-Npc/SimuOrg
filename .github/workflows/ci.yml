@@ -35,4 +35,4 @@ jobs:
         run: ruff check .
 
       - name: Run Tests (Pytest)
-        run: pytest backend/tests
+        run: python -m pytest backend/tests
