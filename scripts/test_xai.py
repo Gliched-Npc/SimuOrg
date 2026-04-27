@@ -1,3 +1,4 @@
+# ruff: noqa: I001, E402
 import os
 import sys
 
