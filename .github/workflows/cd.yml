@@ -11,6 +11,8 @@ env:
   REPO_NAME: simuorg-repo
   IMAGE_NAME: simuorg-backend
   SERVICE_NAME: simuorg-backend-test
+  DATABASE_URL: sqlite:///./test.db
+  ENVIRONMENT: test
 
 jobs:
   test:
@@ -35,7 +37,7 @@ jobs:
         run: ruff check .
 
       - name: Run Tests (Pytest)
-        run: pytest
+        run: pytest backend/tests
 
   deploy:
     runs-on: ubuntu-latest

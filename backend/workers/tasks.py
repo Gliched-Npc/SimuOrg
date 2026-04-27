@@ -1,6 +1,4 @@
 # backend/workers/tasks.py
-# Placeholder — Celery task definitions will go here.
-# backend/workers/tasks.py
 
 import json
 from datetime import datetime, timezone
@@ -116,7 +114,7 @@ def compare_simulations_task(
 
 def orchestrate_task(job_id: str, user_text: str, session_id: str = "global"):
     """
-    Runs the full 3-agent orchestration pipeline in a Celery worker:
+    Runs the full 3-agent orchestration pipeline in a background task:
       Agent 1 — Intent routing + parameter extraction
       Agent 2 — Monte Carlo simulation + reasoning chain
     Writes result to OrchestrateJob so the frontend can poll /orchestrate/status/{job_id}.

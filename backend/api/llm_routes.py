@@ -76,7 +76,7 @@ def generate_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Orchestration (Async via Celery) ──────────────────────────────────────────
+# ── Orchestration (Async via BackgroundTasks) ──────────────────────────────────────────
 
 
 class OrchestrateRequest(BaseModel):
@@ -90,12 +90,12 @@ def orchestrate_endpoint(
     session_id: str = Depends(get_session_id),
 ):
     """
-    Kicks off the full 3-agent orchestration pipeline as an async Celery task.
+    Kicks off the full 3-agent orchestration pipeline as an async background task.
     Returns a job_id immediately — the frontend must poll /orchestrate/status/{job_id}.
 
     Flow:
       1. Creates an OrchestrateJob record in DB (status=queued)
-      2. Fires orchestrate_task.delay() to Celery worker
+      2. Fires orchestrate_task() to background tasks
       3. Returns {job_id} so the frontend can start polling
     """
     from backend.storage.storage import load_artifact

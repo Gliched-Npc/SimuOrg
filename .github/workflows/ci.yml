@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+env:
+  DATABASE_URL: sqlite:///./test.db
+  ENVIRONMENT: test
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -31,4 +35,4 @@ jobs:
         run: ruff check .
 
       - name: Run Tests (Pytest)
-        run: pytest
+        run: pytest backend/tests

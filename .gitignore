@@ -23,3 +23,7 @@ SIMUORG_DOCS.md
 BACKEND_STATUS_README.md
 backend_working.md
 ML_PERFORMANCE_README.md
+
+# --- DATABASE ---
+test.db
+*.db

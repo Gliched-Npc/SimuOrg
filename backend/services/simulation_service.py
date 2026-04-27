@@ -2,7 +2,7 @@
 # Placeholder — simulation orchestration service will go here.
 
 # Orchestration layer between API/workers and core simulation.
-# Routes and Celery tasks call this — never core directly.
+# Routes and background tasks call this — never core directly.
 
 from backend.core.simulation.monte_carlo import run_monte_carlo
 from backend.core.simulation.policies import POLICIES, get_policy
