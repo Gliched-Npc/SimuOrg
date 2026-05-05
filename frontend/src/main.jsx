@@ -5,6 +5,8 @@ import * as Sentry from "@sentry/react";
 import "./index.css";
 import App from "./App.jsx";
 
+console.log("🔍 Sentry DSN found:", import.meta.env.VITE_SENTRY_DSN_FRONTEND);
+
 if (import.meta.env.VITE_SENTRY_DSN_FRONTEND) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN_FRONTEND,
@@ -18,6 +20,8 @@ if (import.meta.env.VITE_SENTRY_DSN_FRONTEND) {
     replaysOnErrorSampleRate: 1.0,
   });
   console.log("✅ Sentry Alerting Initialized for Frontend");
+} else {
+  console.error("❌ Sentry DSN NOT FOUND! Check your .env file.");
 }
 
 createRoot(document.getElementById("root")).render(
