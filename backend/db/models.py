@@ -79,7 +79,7 @@ class MLArtifact(SQLModel, table=True):
 
     __tablename__ = "ml_artifact"
 
-    name: str = Field(primary_key=True)  # "quit_model" | "burnout" | "calibration" | "quality"
+    name: str = Field(primary_key=True)  # "quit_model" | "calibration"
     session_id: str = Field(default="global", primary_key=True)
     artifact_type: str = Field(default="json")  # "pkl" | "json"
     data: str = Field()  # base64 str for pkl, raw JSON str for json

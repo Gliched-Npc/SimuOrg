@@ -27,3 +27,6 @@ ML_PERFORMANCE_README.md
 # --- DATABASE ---
 test.db
 *.db
+
+# --- EDA (local analysis only, not for repo) ---
+eda/

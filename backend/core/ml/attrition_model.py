@@ -92,7 +92,7 @@ def engineer_features(df: pd.DataFrame, encoders: dict = None) -> pd.DataFrame:
     # Engineered: manager tenure relative to company tenure (instability indicator)
     df["tenure_stability"] = df["years_with_curr_manager"] / (df["years_at_company"] + 1)
 
-    # Label-encode categorical optional features.
+    # Label-encode categorical features.
     # Training (encoders=None): fit + register in LABEL_ENCODERS global.
     # Inference (encoders provided): apply saved mapping so codes are consistent.
     cat_cols = [

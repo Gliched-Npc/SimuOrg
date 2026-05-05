@@ -11,6 +11,19 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: simuorg_backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/simuorg_copy_db
+    depends_on:
+      - db
 
 volumes:
   postgres_data:
