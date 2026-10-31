@@ -1104,7 +1104,7 @@ def run_reasoning_chain(
     raw_json = None
 
     # Step 3: Call LLM — Groq first, Ollama fallback
-    # NOTE: Use llama-3.3-70b-versatile or llama3-70b-8192 on Groq.
+    # NOTE: Use openai/gpt-oss-120b or llama3-70b-8192 on Groq.
     # The 8b model is too small for reliable structured reasoning.
     # Check your Groq console at console.groq.com for available models.
 
@@ -1117,7 +1117,7 @@ def run_reasoning_chain(
             api_key=groq_api_key,
         )
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # ← upgrade from 8b-instant
+            model="openai/gpt-oss-120b",  # ← upgrade from 8b-instant
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.15,  # low temp = consistent structured output

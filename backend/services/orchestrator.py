@@ -46,7 +46,7 @@ def orchestrate_user_request(user_text: str, session_id: str = "global") -> dict
         if api_key:
             client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=0.1,

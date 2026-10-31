@@ -42,7 +42,7 @@ def translate_policy(user_text: str, calib_context: dict) -> dict:
         client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_api_key)
         start_time = time.time()
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.1,
